@@ -419,7 +419,7 @@ def limber_weight(tag, fq, b, ell ,chis):
         z_interp = csm.z_from_chi(chis_interp)  
   
         z_grad = np.logspace(-2,np.log10(conf.z_max+1),2000)
-        pk = c.load(basic_conf, 'p_'+c.retag(tag)+c.retag(tag)+'_f1='+str(fq)+'_f2 ='+str(fq), dir_base = 'pks')
+        pk = c.load(basic_conf, 'p_linear_'+c.retag(tag)+c.retag(tag)+'_f1='+str(fq)+'_f2 ='+str(fq), dir_base = 'pks')
         p = pk(conf.ks_hm,z_grad)
         p_grad = interp2d(conf.ks_hm,z_grad,np.gradient(p,z_grad,axis=0), kind = 'quintic',bounds_error=False,fill_value=0.0)
         
@@ -566,8 +566,8 @@ def Cl(tag1, tag2, fq1, fq2, ell):
         pk_limb = None
     else:   
         chis_interp = np.linspace(csm.chi_from_z(1e-2), csm.chi_from_z(conf.z_max+1.1), 1000)            
-        pf_interp = limber(c.load(basic_conf, 'p_'+c.retag(tag2)+c.retag(tag2)+'_f1='+str(fq2)+'_f2 ='+str(fq2), dir_base = 'pks'),chis_interp,ell)  
-        pl_interp = limber(c.load(basic_conf, 'p_linear_'+c.retag(tag2)+c.retag(tag2)+'_f1='+str(fq2)+'_f2 ='+str(fq2), dir_base = 'pks'),chis_interp,ell)          
+        pf_interp = limber(c.load(basic_conf, 'p_'+c.retag(tag1)+c.retag(tag2)+'_f1='+str(fq1)+'_f2 ='+str(fq2), dir_base = 'pks'),chis_interp,ell)  
+        pl_interp = limber(c.load(basic_conf, 'p_linear_'+c.retag(tag1)+c.retag(tag2)+'_f1='+str(fq1)+'_f2 ='+str(fq2), dir_base = 'pks'),chis_interp,ell)          
         pk_limb = interp1d(chis_interp,pf_interp-pl_interp, kind = 'linear',bounds_error=False,fill_value=0.0)
         
     N1,N2 = zb.nbin_tag(tag1),zb.nbin_tag(tag2)
