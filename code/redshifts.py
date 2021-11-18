@@ -194,12 +194,14 @@ class binning(object):
        	        dndz_mod = dndz / 1.0 # conf.N_bins # code uses N_bin to divide all spectra including galaxy. This will factor out and give correct spectrum.
        	        gal_samp = interp1d(z,dndz_mod, kind= 'linear',bounds_error=False,fill_value=0)(zs_int)*self.csm.H_z(zs_int) 
                        
-            elif self.conf.LSSexperiment == 'custom':  #DEFINE HERE YOUR CUSTOM GALAXY REDSHIFT WINDOWS. BELOW WE LEAVE AN EXAMPLE WITH SIMPLE GAUSSIAN WINDOWS
+            elif self.conf.LSSexperiment == 'custom':  
+                #DEFINE HERE YOUR CUSTOM GALAXY REDSHIFT WINDOW (at the moment, a signle window). 
+                #BELOW WE LEAVE AN EXAMPLE WITH A SIMPLE GAUSSIAN WINDOW
                             
                 sigma_example = 0.3
-                z_centers = [1,2,3,4]
+                z_center = 1
             
-                gal_samp= 1.0/sigma_example/np.sqrt(2*np.pi)*np.exp(-(  (z_centers[i]-zs_int)/(sigma_example) )**2/2.0)
+                gal_samp= 1.0/sigma_example/np.sqrt(2*np.pi)*np.exp(-(  (z_center-zs_int)/(sigma_example) )**2/2.0)
 
             else: 
                 raise Exception("LSS experiment choice not defined.")
@@ -225,7 +227,7 @@ class binning(object):
             elif self.conf.LSSexperiment == 'unwise_blue':
                 return 1
             elif self.conf.LSSexperiment == 'custom':
-                return 4
+                return 1
             else: 
                 raise Exception("LSS experiment choice not defined.")
         elif tag in ['tSZ', 'CIB', 'isw_lin','lensing','pCMB']:

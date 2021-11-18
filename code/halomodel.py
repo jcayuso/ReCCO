@@ -736,7 +736,7 @@ class HaloModel(object):
             print("Loading precomputed gas profile")
             return cm.load(self.basic_conf_dir, gasprofile, dir_base = 'hm_data')        
         else:
-            print("Calculating gas profile (this can take up to 30 min)")
+            print("Calculating gas profile (this can take between 30-60 min, but need to do only once for a given config)")
             start = time.time()
             if cutoffradius is None:
                 cutoffradius = self.r200_c
@@ -847,10 +847,10 @@ class HaloModel(object):
     def make_yk_phys(self,):
         
         if cm.exists(self.basic_conf_dir,  'yk_battaglia' , dir_base = 'hm_data'):
-            print("Loading yk profile")
+            print("Loading precomputed yk profile")
             return cm.load(self.basic_conf_dir, 'yk_battaglia', dir_base = 'hm_data')   
         else:
-            print("Calculating yk profile (this can take a bit)")
+            print("Calculating yk profile (this can take between 30-60 min, but need to do only once for a given config)")
             start = time.time()
                 
             xs=np.linspace(0,4,1000)[1:]

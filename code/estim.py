@@ -16,7 +16,7 @@ import common as c
 import copy
 from scipy.linalg import cholesky
 from scipy import linalg
-#import healpy
+import healpy
 
 
 class estimator(object):
@@ -97,13 +97,13 @@ class estimator(object):
         self.Cls['taud-vr'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('taud','vr'), self.load_L())
         self.Cls['vt-vt'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('vt', 'vt'), self.load_L())
         self.Cls['ml-ml'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ml', 'ml'), self.load_L())
-        #self.Cls['ml-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ml', self.lss), self.load_L())
+        self.Cls['ml-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ml', self.lss), self.load_L())
         #self.Cls['lensing-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing',self.lss), self.load_L())
         
         self.Cls['pCMB-pCMB'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('pCMB','pCMB'), c.load(self.basic_conf_dir,'L_pCMB_lmax='+str(self.data_lmax), dir_base = 'Cls'))
         #self.Cls['lensing-lensing'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing','lensing'), self.load_L())
         self.Cls['kSZ-kSZ'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('kSZ','Nfine_'+str(self.N_fine_modes)),self.load_L())
-        #self.Cls['ML-ML'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ML','Nfine_'+str(self.N_fine_modes)),self.load_L())
+        self.Cls['ML-ML'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ML','Nfine_'+str(self.N_fine_modes)),self.load_L())
                 
         if use_cleaned == True:       
             print("Using clean TT")       
@@ -1239,6 +1239,7 @@ class estimator(object):
     
     def get_qe_sims_ml(self,nside, nsideout, n_level, use_cleaned = True, mask = False):
         
+        #NEEDS UPDATE!!!!!!!!
         
         self.set_theory_Cls(add_ksz = False, add_ml = True, use_cleaned = use_cleaned)
          
@@ -1346,10 +1347,6 @@ class estimator(object):
         if mask:                                     
             map_mask = healpy.pixelfunc.ud_grade(np.load('SO_mask_N2048.npy').astype(bool), nside_out = nsideout).astype(float)
             mask_d_1 = self.mask_edge(nsideout,map_mask, edgeval =0)
-            mask_d_2 = self.mask_edge(nsideout,mask_d_1, edgeval =0)
-            mask_d_3 = self.mask_edge(nsideout,mask_d_2, edgeval =0)
-            mask_d_4 = self.mask_edge(nsideout,mask_d_3, edgeval =0)
-            mask_d_5 = self.mask_edge(nsideout,mask_d_4, edgeval =0)
 
         for r in np.arange(real_num):
             
@@ -1447,10 +1444,7 @@ class estimator(object):
                                        
         map_mask = healpy.pixelfunc.ud_grade(np.load('SO_mask_N2048.npy').astype(bool), nside_out = nsideout).astype(float)
         mask_d_1 = self.mask_edge(nsideout,map_mask, edgeval =0)
-        mask_d_2 = self.mask_edge(nsideout,mask_d_1, edgeval =0)
-        mask_d_3 = self.mask_edge(nsideout,mask_d_2, edgeval =0)
-        mask_d_4 = self.mask_edge(nsideout,mask_d_3, edgeval =0)
-        mask_d_5 = self.mask_edge(nsideout,mask_d_4, edgeval =0)
+
                 
         print("Geeting R and Noise")
         R  = c.load(self.basic_conf_dir,'Rvv_'+str(nside)+'_'+str(nsideout), dir_base = self.estim_dir+'sims')

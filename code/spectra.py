@@ -482,7 +482,7 @@ def limber_integration(tag1, tag2, fq1, fq2, b1, b2, ell, pk_limb):
     
     if tag1 in ['isw_lin','g', 'tSZ', 'CIB','lensing'] and tag2 in ['isw_lin','g','tSZ', 'CIB','lensing']: 
         #This observables have wide window functions regardless of the redshift binning.
-        chis = np.linspace(csm.chi_from_z(1e-2), csm.chi_from_z(conf.z_max+0.99), 3000)
+        chis = np.linspace(csm.chi_from_z(1e-2), csm.chi_from_z(conf.z_max+0.99), 6000)
         #chis = np.linspace(csm.chi_from_z(1e-2), csm.chi_from_z(8), 10000)
         
     else:
@@ -767,7 +767,7 @@ def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse):
                
                     elif conf.LSSexperiment == 'custom':  
                         
-                        Ns_ell = np.zeros((len(ell_sparse),conf.N_bins,conf.N_bins))
+                        Ns_ell = np.zeros((len(ell_sparse),1,1))
                         for i_1 in np.arange(conf.N_bins):
                             for i_2 in np.arange(conf.N_bins):
                                 if i_1 ==i_2:

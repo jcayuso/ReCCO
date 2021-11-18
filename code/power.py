@@ -80,6 +80,8 @@ class pks(object):
                             return 'gal'
                         elif self.conf.LSSexperiment == 'unwise_blue':   # we model the unWISE blue sample as a linearly biased tracer of dark matter 
                             return 'm'
+                        elif self.conf.LSSexperiment == 'custom':   
+                            return 'gal'
                         else:
                             raise Exception ("LSS experiment not supported.")
                     else:

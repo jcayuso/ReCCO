@@ -1,5 +1,5 @@
 import numpy as np
-#import healpy as hp
+import healpy as hp
 from scipy import interpolate
 
 def model_selection(tag):
