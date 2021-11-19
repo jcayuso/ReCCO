@@ -22,11 +22,10 @@ zs_hm = np.logspace(-2,np.log10(6),150) #z-sampling
 
 ################ LSS 
 
-LSSexperiment ='LSST' # 'unwise_blue' #'custom
+LSSexperiment = 'LSST' # 'unwise_blue' #'custom
 
 sigma_photo_z = 0.05 
 sigma_cal = 1e-4 # variance of photometric calibration erros (as appearing in arXiv:1709.08661)
-
 
 ################ cosmological parameters
 

@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Jun 23 14:56:42 2020
 
-@author: jcayuso
-"""
 
 import numpy as np
 from scipy.interpolate import interp1d

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Jun 23 14:56:42 2020
-
-@author: jcayuso
-"""
 
 import numpy as np
 import power 
@@ -1085,6 +1080,8 @@ if __name__ == '__main__':
           
         else:
             
+            print("Computing Cls.")
+            
             if args.lmax is None:
                 parser.print_help()
                 raise Exception("lmax has to be specified ")
@@ -1093,6 +1090,7 @@ if __name__ == '__main__':
             tag1 = args.tracer1
             tag2 = args.tracer2
             
+            print("Computing "+tag1+"-"+tag2+" Cl")
 
             if args.tracer1 is None or args.tracer2 is None:
                 parser.print_help()
@@ -1101,8 +1099,6 @@ if __name__ == '__main__':
             # If we want the primary CMB power spectrum we use camb.
                 
             if tag1 in ['pCMB'] and tag2 in ['pCMB']:
-                
-                print("Computing primary CMB using camb (both lensed and unlensed).")
                 
                 ell_sparse =np.unique(np.append(np.geomspace(2,lmax,800).astype(int), lmax)) 
                 Cls = np.zeros((len(ell_sparse),1,1))
