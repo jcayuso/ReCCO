@@ -574,7 +574,7 @@ def Cl(tag1, tag2, fq1, fq2, ell):
             C[i,:] = Cl_row(tag1, tag2, fq1, fq2, ell, pk_limb,i) 
     else:   
         pool = mp.Pool(get_n_cores())
-        pool.starmap(Cl_row, [(tag1, tag2, fq1, fq2, ell, pk_limb, i)  for i in np.arange(N1)])
+        C[:,:] = pool.starmap(Cl_row, [(tag1, tag2, fq1, fq2, ell, pk_limb, i)  for i in np.arange(N1)])
         pool.close()       
                 
     return C
@@ -763,8 +763,8 @@ def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse):
                     elif conf.LSSexperiment == 'custom':  
                         
                         Ns_ell = np.zeros((len(ell_sparse),1,1))
-                        for i_1 in np.arange(conf.N_bins):
-                            for i_2 in np.arange(conf.N_bins):
+                        for i_1 in np.arange(1):
+                            for i_2 in np.arange(1):
                                 if i_1 ==i_2:
                                     Ns_ell[:,i_1,i_2] = 9.2*10**(-8) 
                                     
