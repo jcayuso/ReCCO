@@ -51,7 +51,7 @@ class estimator(object):
         self.N_fine_modes = self.conf.N_bins  
         self.lss = 'g'
         
-        self.realnum = 20
+        self.realnum = 1
     
         print("Default lss = 'g' . Modify with set_lss method.")
         print('Default N_fine_modes = '+str(self.N_fine_modes)+'. Modify with set_Nfine method.')
@@ -81,26 +81,32 @@ class estimator(object):
     def load_L(self,):
         return c.load(self.basic_conf_dir,'L_sample_lmax='+str(self.data_lmax), dir_base = 'Cls')
     
-    def set_theory_Cls(self, add_ksz = True, add_ml = True, use_cleaned = False, frequency = None, get_haar = False):
+    def set_theory_Cls(self, add_ksz = True, add_ml = True, add_lensing =True ,use_cleaned = False, frequency = None, get_haar = False):
 
         #frequency is only used if use_cleaned = False. If None, you have primary CMB + a simple gaussian white noise with beam. If you
         #use a frequency, at the moment it should be a SO one. 
         
         self.Cls['lss-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl(self.lss,self.lss),self.load_L())
-        self.Cls['taud-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('taud',self.lss),self.load_L())
-        self.Cls['taud-taud'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('taud','taud'),self.load_L())
-        self.Cls['vr-vr'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('vr','vr'), self.load_L())
-        self.Cls['taud-vr'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('taud','vr'), self.load_L())
-        self.Cls['vt-vt'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('vt', 'vt'), self.load_L())
-        self.Cls['ml-ml'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ml', 'ml'), self.load_L())
-        self.Cls['ml-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ml', self.lss), self.load_L())
-        #self.Cls['lensing-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing',self.lss), self.load_L())
-        
         self.Cls['pCMB-pCMB'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('pCMB','pCMB'), c.load(self.basic_conf_dir,'L_pCMB_lmax='+str(self.data_lmax), dir_base = 'Cls'))
-        #self.Cls['lensing-lensing'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing','lensing'), self.load_L())
-        self.Cls['kSZ-kSZ'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('kSZ','Nfine_'+str(self.N_fine_modes)),self.load_L())
-        self.Cls['ML-ML'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ML','Nfine_'+str(self.N_fine_modes)),self.load_L())
-                
+        
+        if add_lensing:
+            self.Cls['lensing-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing',self.lss), self.load_L())
+            self.Cls['lensing-lensing'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing','lensing'), self.load_L())
+        
+        if add_ksz:       
+            self.Cls['taud-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('taud',self.lss),self.load_L())
+            self.Cls['taud-taud'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('taud','taud'),self.load_L())
+            self.Cls['vr-vr'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('vr','vr'), self.load_L())
+            self.Cls['taud-vr'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('taud','vr'), self.load_L())
+            self.Cls['kSZ-kSZ'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('kSZ','Nfine_'+str(self.N_fine_modes)),self.load_L())
+        
+        if add_ml:
+            self.Cls['vt-vt'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('vt', 'vt'), self.load_L())
+            self.Cls['ml-ml'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ml', 'ml'), self.load_L())
+            self.Cls['ml-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ml', self.lss), self.load_L())
+            self.Cls['ML-ML'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('ML','Nfine_'+str(self.N_fine_modes)),self.load_L())
+
+    
         if use_cleaned == True:       
             print("Using clean TT")       
             self.Ttag = 'Tc'
@@ -151,21 +157,21 @@ class estimator(object):
             H = self.get_haar(kmax)
             Bc = self.zb.binmatrix(self.N_fine_modes, self.conf.N_bins)
             
+            if add_ksz:
+                
+                Ctaudlss_sample = c.load(self.basic_conf_dir,'Cl_taud_'+self.lss+'_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('taud',self.lss,self.conf,N_bins = self.N_fine_modes))  
+                self.Cls['haartaud-'+self.lss] = np.swapaxes(np.dot(np.dot(H,Ctaudlss_sample), np.transpose(Bc)),0,1)
+                idx_cut = np.where(self.load_L()  <100)[0][-1]     
+                self.Cls['vr_fine-vr_fine']  = loginterp.log_interpolate_matrix(c.load(self.basic_conf_dir,'Cl_vr_vr_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('vr','vr',self.conf,N_bins = self.N_fine_modes))[:idx_cut,:,:] ,self.load_L()[:idx_cut])
+               
+            if add_ml:
+                   
+                Cmllss_sample   = c.load(self.basic_conf_dir,'Cl_ml_'+self.lss+'_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('ml',self.lss,self.conf,N_bins = self.N_fine_modes))  
+                self.Cls['haarml-'+self.lss]   =  np.swapaxes(np.dot(np.dot(H,Cmllss_sample), np.transpose(Bc)),0,1)
+                idx_cut = np.where(self.load_L()  <100)[0][-1]     
+                self.Cls['vt_fine-vt_fine'] = loginterp.log_interpolate_matrix(c.load(self.basic_conf_dir,'Cl_vt_vt_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('vt','vt',self.conf,N_bins = self.N_fine_modes))[:idx_cut,:,:] ,self.load_L()[:idx_cut])
+
             
-            Ctaudlss_sample = c.load(self.basic_conf_dir,'Cl_taud_'+self.lss+'_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('taud',self.lss,self.conf,N_bins = self.N_fine_modes))  
-            #Cmllss_sample   = c.load(self.basic_conf_dir,'Cl_ml_'+self.lss+'_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('ml',self.lss,self.conf,N_bins = self.N_fine_modes))  
-                        
-            self.Cls['haartaud-'+self.lss] = np.swapaxes(np.dot(np.dot(H,Ctaudlss_sample), np.transpose(Bc)),0,1)
-            #self.Cls['haarml-'+self.lss]   =  np.swapaxes(np.dot(np.dot(H,Cmllss_sample), np.transpose(Bc)),0,1)
-        
-
-            idx_cut = np.where(self.load_L()  <100)[0][-1]     
-            self.Cls['vr_fine-vr_fine']  = loginterp.log_interpolate_matrix(c.load(self.basic_conf_dir,'Cl_vr_vr_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('vr','vr',self.conf,N_bins = self.N_fine_modes))[:idx_cut,:,:] ,self.load_L()[:idx_cut])
-            #self.Cls['vt_fine-vt_fine'] = loginterp.log_interpolate_matrix(c.load(self.basic_conf_dir,'Cl_vt_vt_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc('vt','vt',self.conf,N_bins = self.N_fine_modes))[:idx_cut,:,:] ,self.load_L()[:idx_cut])
-
-            
-        
-
     def set_Cl(self, tag1, tag2, CL, extra =''): 
         self.data_lmax = CL.shape[0]-1
         if CL.shape[0] != self.data_lmax+1:
@@ -373,7 +379,7 @@ class estimator(object):
                 
                 a.append(terms)
         
-        if self.conf.LSSexperiment == 'unwise_blue':
+        elif self.conf.LSSexperiment == 'unwise_blue':
             
             Clsslss_alpha_gamma  = self.Cls['lss-lss'][:,0,0]
             CTT                  = self.Cls['T-T'][:,0,0]
@@ -1503,6 +1509,16 @@ class estimator(object):
             
             
         pass
+    
+    
+    def load_clqe_sim(self,real,tag,nside, nsideout, n_level,lcut, mask = True):
+        
+        Cvv_recon = c.load(self.basic_conf_dir,'C'+tag+tag+'_recon_'+str(nside)+'_'+str(nsideout)+'_real='+str(real)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')   
+        Cvv_actual_rot = c.load(self.basic_conf_dir,'C'+tag+tag+'_actual_rot_'+str(nside)+'_'+str(nsideout)+'_real='+str(real)+'_mask='+str(mask)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+        Cvv_diff = c.load(self.basic_conf_dir,'C'+tag+tag+'_diff_'+str(nside)+'_'+str(nsideout)+'_real='+str(real)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+        Cvv_noise = c.load(self.basic_conf_dir,'C'+tag+tag+'_noise_'+str(nside)+'_'+str(nsideout)+'_real='+str(real)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+            
+        return Cvv_recon,Cvv_actual_rot,Cvv_diff,Cvv_noise
 
     
     # def get_Clp_sims(self,nside, nsideout, n_level):
