@@ -1,14 +1,23 @@
-# ReCCO
+# ReCCO (Reconstruction Code for Cosmological Observables)
 
-Code for calculation of CMB secondaries (kSZ,tSZ,lensing,moving lens) and CIB, cross-correlations
-with galaxy surveys and reconstruction of radial velocity and transverse velocity
-on the lightcone.
+List of authors: Richard Bloch, Juan Cayuso, Selim Hotinli, Matthew Johnson, Fiona McCarthy, James Mertens, Moritz Münchmeyer
 
-spectra.py generates Cls
-estim.py  processes the Cls to calculate biases and noise to reconstructed 
-velocity fields and provides pipeline for Gaussian simulations.
+ReCCO consists on a collection of tools to calculate CMB secondary anisotropies (kSZ,tSZ,moving lens, CMB lensing)
+and reconstruct cosmological fields on our past lightcone (radial velocity fields and transverse velocity field).
 
-Future update:
--user guide
--fully integrate remote dipole and remote quadrupole reconstructions
-(basic functions in remote_spectra.py)
+The code is written in python ( use version '3.8.5' or above). Some important dependencies are:
+
+1) CAMB  version '1.3.0' or above
+2) pyfftlog
+3) healpy
+
+See User_guide.ipynb to learn how to use the code.
+See "Insert paper link here" for an in depth description of the reconstruction framework.
+
+Future updates:
+
+- Add intrinsic contributions to the remote dipole (effective velocity field)
+- Add remote quadrupole field
+- Add accesibility to accuracy parameters
+
+ 
