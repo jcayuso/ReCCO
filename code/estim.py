@@ -290,7 +290,7 @@ class estimator(object):
                         
             return G
         
-        elif self.conf.LSSexperiment == 'unwise_blue':
+        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom':
         
             CTT     = self.Cls['T-T'][:,0,0]
             CTlss   = self.Cls['T-lss'][:,0,0]    
@@ -336,7 +336,7 @@ class estimator(object):
                         
                         if self.conf.LSSexperiment == 'LSST':
                             terms += self.f(tag_f, alpha, gamma, ell, ell_1, ell_2, Ae = Ae)*self.g(tag_g, alpha, ell, ell_1, ell_2, Ae = Ae)
-                        elif self.conf.LSSexperiment == 'unwise_blue':
+                        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom':
                             terms += self.f(tag_f, 0, gamma, ell, ell_1, ell_2, Ae = Ae)*self.g(tag_g, alpha, ell, ell_1, ell_2, Ae = Ae)
                         else:
                             raise Exception("LSS experiment not valid")
@@ -387,7 +387,7 @@ class estimator(object):
                 
                 a.append(terms)
         
-        elif self.conf.LSSexperiment == 'unwise_blue':
+        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom':
             
             Clsslss_alpha_gamma  = self.Cls['lss-lss'][:,0,0]
             CTT                  = self.Cls['T-T'][:,0,0]
@@ -1232,9 +1232,9 @@ class estimator(object):
             cllsslss[0:100]=0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
             
             if mask:
-                Tfield_gauss = Tfield_gauss*np.load('SO_mask_N2048.npy')
-                Tfield_full  = Tfield_full*np.load('SO_mask_N2048.npy')
-                lssmaps = lssmaps*np.load('SO_mask_N2048.npy')
+                Tfield_gauss = Tfield_gauss*np.load('data/mask_'+str(nside)+'.npy')
+                Tfield_full  = Tfield_full*np.load('data/mask_'+str(nside)+'.npy')
+                lssmaps = lssmaps*np.load('data/mask_'+str(nside)+'.npy')
                                     
             print("Reconstructing velocity")
                 
@@ -1380,9 +1380,9 @@ class estimator(object):
             cllsslss[0:100]=0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
             
             if mask:
-                Tfield_gauss = Tfield_gauss*np.load('SO_mask_N2048.npy')
-                Tfield_full  = Tfield_full*np.load('SO_mask_N2048.npy')
-                lssmaps = lssmaps*np.load('SO_mask_N2048.npy')
+                Tfield_gauss = Tfield_gauss*np.load('data/mask_'+str(nside)+'.npy')
+                Tfield_full  = Tfield_full*np.load('data/mask_'+str(nside)+'.npy')
+                lssmaps = lssmaps*np.load('data/mask_'+str(nside)+'.npy')
                                     
             print("Reconstructing velocity")
                 
@@ -1409,7 +1409,7 @@ class estimator(object):
         real_num = self.realnum
         
         if mask:                                     
-            map_mask = healpy.pixelfunc.ud_grade(np.load('SO_mask_N2048.npy').astype(bool), nside_out = nsideout).astype(float)
+            map_mask = healpy.pixelfunc.ud_grade(np.load('data/mask_'+str(nside)+'.npy').astype(bool), nside_out = nsideout).astype(float)
             mask_d_1 = self.mask_edge(nsideout,map_mask, edgeval =0)
             
         print("Getting rotation matrix ")
@@ -1479,7 +1479,7 @@ class estimator(object):
         real_num = self.realnum
         
         if mask:                                     
-            map_mask = healpy.pixelfunc.ud_grade(np.load('SO_mask_N2048.npy').astype(bool), nside_out = nsideout).astype(float)
+            map_mask = healpy.pixelfunc.ud_grade(np.load('data/mask_'+str(nside)+'.npy').astype(bool), nside_out = nsideout).astype(float)
             mask_d_1 = self.mask_edge(nsideout,map_mask, edgeval =0)
             
         print("Getting rotation matrix ")
