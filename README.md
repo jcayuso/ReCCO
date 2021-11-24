@@ -12,7 +12,7 @@ The code is written in python ( use version '3.8.5' or above). Some important de
 3) healpy
 
 See User_guide.ipynb to learn how to use the code.
-See "Insert paper link here" for an in depth description of the reconstruction framework.
+See https://arxiv.org/abs/2111.11526 for an in depth description of the reconstruction framework.
 
 Future updates:
 
@@ -21,3 +21,4 @@ Future updates:
 - Add accesibility to accuracy parameters
 
  
+If you use this code in your work, you must cite the paper: https://arxiv.org/abs/2111.11526.
