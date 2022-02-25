@@ -135,16 +135,16 @@ def growth(tag,fq):
     G = np.sqrt(p/((p[0,:])[np.newaxis,:]))
     return interp2d(conf.ks_hm,conf.zs_hm,G , kind = 'linear',bounds_error=False,fill_value=0.0)
 
-def eff_growth(tag, fq, b):
+#def eff_growth(tag, fq, b):
      
-    zc = zb.zbins_zcentral[b]
-    geff =  growth(tag, fq)(conf.ks_hm[0],conf.zs_hm)[:,0]/(growth(tag, fq)(conf.ks_hm[0],zc)[0])
-    return interp1d(conf.zs_hm, geff, kind = 'linear',bounds_error=False,fill_value="extrapolate")
+#    zc = zb.zbins_zcentral[b]
+#    geff =  growth(tag, fq)(conf.ks_hm[0],conf.zs_hm)[:,0]/(growth(tag, fq)(conf.ks_hm[0],zc)[0])
+#    return interp1d(conf.zs_hm, geff, kind = 'linear',bounds_error=False,fill_value="extrapolate")
 
-# def eff_growth(tag, fq, b):
+def eff_growth(tag, fq, b):
     
-#     geff =  growth(tag, fq)(conf.ks_hm[0],conf.zs_hm)[:,0]
-#     return interp1d(conf.zs_hm, geff, kind = 'linear',bounds_error=False,fill_value=0.0)
+    geff =  growth(tag, fq)(conf.ks_hm[0],conf.zs_hm)[:,0]
+    return interp1d(conf.zs_hm, geff, kind = 'linear',bounds_error=False,fill_value=0.0)
 
 
 def fftlog_weights(tag, fq, b,chis):
@@ -735,7 +735,9 @@ def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse):
                         if Pks.hmod is None:
                             Pks.start_halo() 
                         
-                        ngalMpc3z = Pks.hmod.nbar_galaxy(zb.zbins_zcentral,Pks.hmod.logmmin,Pks.hmod.logmmax,mthreshHOD=Pks.mthreshHODstellar) 
+                        MthreshHODstellar = interp1d(Pks.hmod.z,Pks.mthreshHODstellar)(zb.zbins_zcentral)
+                        ngalMpc3z = Pks.hmod.nbar_galaxy(zb.zbins_zcentral,Pks.hmod.logmmin,Pks.hmod.logmmax,MthreshHODstellar)
+                        #ngalMpc3z = Pks.hmod.nbar_galaxy(zb.zbins_zcentral,Pks.hmod.logmmin,Pks.hmod.logmmax,mthreshHOD=Pks.mthreshHODstellar) 
                         dz = np.diff(zb.zbins_z) #get the density over the red shift bin (assuming it is constant within the bin).
                         ngalSteradBinned = Pks.hmod.convert_n_mpc3_arcmin2(ngalMpc3z,zb.zbins_zcentral) * power.halomodel.allsky_arcmin2 / power.halomodel.allsky_sterad * dz
                         
