@@ -699,7 +699,7 @@ def get_CTX( X,freq_i, lmax, isw = False, cib=False, tsz=False):
             try:
                 clTX += c.load(basic_conf,'Cl_'+X+'_CIB'+'('+str(freq_i)+')'+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc(X,'CIB',conf))[:,:,0]
             except:
-                clTX += c.load(basic_conf,'Cl_CIB'+'('+str(freq_i)+')'+'_'+X+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('CIB','X',conf))[:,0,:]
+                clTX += c.load(basic_conf,'Cl_CIB'+'('+str(freq_i)+')'+'_'+X+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('CIB',X,conf))[:,0,:]
         if tsz:
             try:
                 clTX += c.load(basic_conf,'Cl_'+X+'_tSZ'+'('+str(freq_i)+')'+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc(X,'tSZ',conf))[:,:,0]
@@ -746,7 +746,6 @@ def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse):
                             for i_2 in np.arange(conf.N_bins):
                                 if i_1 ==i_2:
                                     Ns_ell[:,i_1,i_2] = 1.0/ngalSteradBinned[i_1]
-                                    #Ns_ell[:,i_1,i_2] = 9.2e-8  # This is for unwise blue bin only
                                     
                         c.dump(basic_conf, Ns_ell,'Nlshot_g_g_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('g','g',conf))
                     
