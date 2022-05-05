@@ -1398,7 +1398,7 @@ class estimator(object):
         
         lcut = lcut = 3*nside-self.lcut_num
         
-        full  =  c.load(self.basic_conf_dir,'qe_'+tag+'_'+str(nside)+'_'+str(nsideout)+'_gauss'+'_real='+str(real)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+        full  =  c.load(self.basic_conf_dir,'qe_'+tag+'_'+str(nside)+'_'+str(nsideout)+'_full'+'_real='+str(real)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
         gauss =  c.load(self.basic_conf_dir,'qe_'+tag+'_'+str(nside)+'_'+str(nsideout)+'_gauss'+'_real='+str(real)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
         
         return full, gauss
