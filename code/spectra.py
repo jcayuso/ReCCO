@@ -56,8 +56,8 @@ def ne0z(z):
 
 # frequencies
 
-def freqs():   
-    return conf.cleaning_frequencies[conf.cleaning_mode]
+def freqs(CMB_experiment):   
+    return conf.cleaning_frequencies[CMB_experiment]
        
 # changes Jy to microK
 def f_tSZ(nu):
@@ -650,7 +650,7 @@ def Cl_ml(Cf, ell, lmax):
 ###################################### Some auxiliary functions for multifrequency cleaning
     
 
-def get_CTT(freq_i, freq_j,  lmax, primary=True, inoise=True, cib=True, tsz=True):
+def get_CTT(freq_i, freq_j,  lmax,CMB_experiment, primary=True, inoise=True, cib=True, tsz=True,):
     
     ell_sparse = np.unique(np.append(np.geomspace(1,lmax,120).astype(int), lmax)) 
     TT_spec = np.zeros(len(ell_sparse))
@@ -658,10 +658,10 @@ def get_CTT(freq_i, freq_j,  lmax, primary=True, inoise=True, cib=True, tsz=True
     if primary:
         TT_spec += loginterp.log_interpolate_matrix(c.load(basic_conf,'Cl_pCMB_pCMB_lmax='+str(lmax), dir_base = 'Cls'), c.load(basic_conf,'L_pCMB_lmax='+str(lmax), dir_base = 'Cls'))[ell_sparse,0,0]
     if inoise:
-        noisemodel = ng.model_selection(conf.cleaning_mode)
-        noise_spec = noisemodel(conf.cleaning_frequencies[conf.cleaning_mode], ell_sparse)
+        noisemodel = ng.model_selection(CMB_experiment)
+        noise_spec = noisemodel(conf.cleaning_frequencies[CMB_experiment], ell_sparse)
         if freq_i == freq_j:  # Assume uncorrelated freqxfreq noise
-            f_i = np.where(freq_i==conf.cleaning_frequencies[conf.cleaning_mode])[0][0]
+            f_i = np.where(freq_i==conf.cleaning_frequencies[CMB_experiment])[0][0]
             TT_noise = noise_spec[f_i,:] / conf.T_CMB**2
         TT_spec += TT_noise
     if ((cib) or (tsz)):
@@ -709,9 +709,9 @@ def get_CTX( X,freq_i, lmax, isw = False, cib=False, tsz=False):
 
 ###################################### halo model spectra
 
-def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse):
+def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse,frequencies=None):
     
-    print("Getting all necessary power spectra")
+    print("Getting all necessary power spectra",flush=True)
     
     Pks = power.pks(conf_module = conf)
     
@@ -719,11 +719,22 @@ def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse):
         for fq2 in Fq2:
                        
             print('f1='+str(fq1)+' f2='+str(fq2))
-            Pks.get_pks(tag1,tag2,fq1,fq2)  #Check if underlying power spectra is already computed
+            Pks.get_pks(tag1,tag2,fq1,fq2,frequencies=frequencies)  #Check if underlying power spectra is already computed
             if tag1 != tag2:
                 Pks.get_pks(tag1,tag1,fq1,fq1)
                 Pks.get_pks(tag2,tag2,fq2,fq2)
-                
+            if tag1 == 'CIB' and tag2 == 'CIB':
+
+                if fq1== fq2:
+                    if not c.exists(basic_conf,'Nlshot_CIB('+str(fq1)+')_CIB('+str(fq2)+')_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('CIB','CIB',conf)):
+                           print('Calculating shot noise for CIB' +str(fq1)+' X CIB '+str(fq2)+' spectrum')
+                           Ns_ell = np.zeros((len(ell_sparse),1,1))
+                           if Pks.hmod is None:
+                                Pks.start_halo(frequencies)
+                           Ns_ell = jy_to_uK(fq1)**2/conf.T_CMB**2*np.ones(Ns_ell.shape)*Pks.hmod.CIB.shot_noise(fq1,0.05,Pks.hmod.central_flux[str(fq1)]+Pks.hmod.satflux[str(fq1)],Pks.hmod.z,Pks.hmod)
+
+                           c.dump(basic_conf, Ns_ell,'Nlshot_CIB('+str(fq1)+')_CIB('+str(fq2)+')_lmax='+str(lmax) ,dir_base = 'Cls/'+c.direc('CIB','CIB',conf))
+ 
             if tag1 == 'g' and tag2 == 'g':
                 
                 if not c.exists(basic_conf,'Nlshot_g_g_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('g','g',conf)):
@@ -733,7 +744,7 @@ def power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse):
                     if conf.LSSexperiment == 'LSST':
                         
                         if Pks.hmod is None:
-                            Pks.start_halo() 
+                            Pks.start_halo(frequencies) 
                         
                         MthreshHODstellar = interp1d(Pks.hmod.z,Pks.mthreshHODstellar)(zb.zbins_zcentral)
                         ngalMpc3z = Pks.hmod.nbar_galaxy(zb.zbins_zcentral,Pks.hmod.logmmin,Pks.hmod.logmmax,MthreshHODstellar)
@@ -793,15 +804,17 @@ if __name__ == '__main__':
     parser.add_argument('-cleanTX', '--cleanTX', help='Compute the cleaned TT spectra and the cleaned TX spectra',action='store')
     parser.add_argument('-Tfreq', '--Tfreq', help='Compute the TT,Tg,Tvr and Ttaud for a given frequency',action='store')
     parser.add_argument('-coarse', '--coarse', help='Coarse grain from Nfine to Nbin',action='store_true')
+    parser.add_argument('-CMBexperiment',default='SO',help='CMB experiment, which determines the frequencies computed') 
+   
     
-    
+ 
     if not len(sys.argv) > 1 :
         parser.print_help()
         
     else:    
         args = parser.parse_args()
         
-        
+        CMB_experiment = args.CMBexperiment     
         
         #################################################################################################
         ###########################################  SPACE FOR USEFUL CALLS 
@@ -850,11 +863,11 @@ if __name__ == '__main__':
                 coarsefreqs1 = coarsefreqs2 = ['']
                 if zb.nbin_tag(tag1) == 1:
                     if tag1 in ['CIB', 'tSZ']:
-                        coarsefreqs1 = ['(%d)'% f for f in freqs()]
+                        coarsefreqs1 = ['(%d)'% f for f in freqs(CMB_experiment)]
                     killflag1 = False
                 if zb.nbin_tag(tag2) == 1:
                     if tag2 in ['CIB', 'tSZ']:
-                        coarsefreqs2 = ['(%d)'% f for f in freqs()]
+                        coarsefreqs2 = ['(%d)'% f for f in freqs(CMB_experiment)]
                     killflag2 = False
                 
                 killflag = killflag1 * killflag2  # Avoid double processing for frequency-less indices. Kind of messy can probably be done nicer
@@ -988,19 +1001,22 @@ if __name__ == '__main__':
             elif args.cleanTX is not None:
                 
                 X = args.cleanTX
+                if 'CIB' in X:
+                    X = X[:3]+'('+X[3:]+')'
                 
                 ell_sparse = np.unique(np.append(np.geomspace(1,lmax,120).astype(int), lmax)) 
                 
                 CTT_clean = np.zeros((len(ell_sparse),1,1))
-                CTX_clean = np.zeros((len(ell_sparse),1,conf.N_bins))
+                if args.cleanTX is not 'T':
+                    CTX_clean = np.zeros((len(ell_sparse),1,conf.N_bins))
                                 
-                F = freqs()
+                F = freqs(CMB_experiment)
                 NMAPS = len(F)
                 C = np.zeros((NMAPS, NMAPS, len(ell_sparse)))
                 
                 for i in np.arange(NMAPS):
                     for j in np.arange(NMAPS):
-                        C[i,j] = get_CTT(F[i], F[j], lmax, primary=True, inoise=True, cib=True, tsz=True)
+                        C[i,j] = get_CTT(F[i], F[j], lmax, CMB_experiment,primary=True, inoise=True, cib=True, tsz=True)
 
                         
                 print('Computing ILC weights')
@@ -1023,10 +1039,12 @@ if __name__ == '__main__':
                 
                 print('Adding dirty components')
                 for i in range(NMAPS):
-                    extragal_cross[i] += get_CTX( X,F[i], lmax, isw = False, cib=True, tsz=True)
-                    noise_specs[i,i] += get_CTT(F[i], F[i], lmax,primary=False, inoise=True,cib=False,tsz=False)
+                    if args.cleanTX is not 'T':
+
+                        extragal_cross[i] += get_CTX( X,F[i], lmax, isw = False, cib=True, tsz=True)
+                    noise_specs[i,i] += get_CTT(F[i], F[i], lmax,CMB_experiment,primary=False, inoise=True,cib=False,tsz=False)
                     for j in range(NMAPS):          
-                        extragal_specs[i,j] += get_CTT(F[i], F[j], lmax, primary=False,inoise=False,cib=True,tsz=True)    
+                        extragal_specs[i,j] += get_CTT(F[i], F[j], lmax, CMB_experiment,primary=False,inoise=False,cib=True,tsz=True)    
                 
                 for lid, l in enumerate(ell_sparse):
                     
@@ -1041,14 +1059,16 @@ if __name__ == '__main__':
                         for n in range(conf.N_bins):
                             cross_facs[lid,n] = np.dot(w, extragal_cross[:,lid,n])  # The cleaned cross spectra is just the weighted CgT as shot/inoise are uncorrelated
             
-                CTT_clean[:,0,0] = get_CTT(F[0], F[0], lmax,primary=True,inoise=False,cib=False,tsz=False) + ell_facs  # TT clean = TT real + ILC residuals
+                CTT_clean[:,0,0] = get_CTT(F[0], F[0], lmax,CMB_experiment,primary=True,inoise=False,cib=False,tsz=False) + ell_facs  # TT clean = TT real + ILC residuals
                 if X in ['vr','taud']:
                     CTX_clean[:,0,:] = get_CTX( X,F[0], lmax, isw = True, cib=False, tsz=False)
-                else:
+                elif args.cleanTX is not 'T':
                     CTX_clean[:,0,:] = get_CTX( X,F[0], lmax, isw = True, cib=False, tsz=False)+cross_facs 
                 
                 c.dump(basic_conf, CTT_clean,'Cl_Tc_Tc_lmax='+str(lmax), dir_base = 'Cls')
-                c.dump(basic_conf, CTX_clean,'Cl_Tc_'+X+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('Tc',X,conf)) 
+                if args.cleanTX is not 'T':
+
+                    c.dump(basic_conf, CTX_clean,'Cl_Tc_'+X+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('Tc',X,conf)) 
 
             
                 
@@ -1062,7 +1082,7 @@ if __name__ == '__main__':
                 CTtaud_freq = np.zeros((len(ell_sparse),1,conf.N_bins))
                 
                 freq = int(args.Tfreq)
-                CTT_freq[:,0,0] = get_CTT(freq, freq,  lmax, primary=True, inoise=False, cib=True, tsz=True) # we dont add instrumental noise here
+                CTT_freq[:,0,0] = get_CTT(freq, freq,  lmax, CMB_experiment,primary=True, inoise=False, cib=True, tsz=True) # we dont add instrumental noise here
                 CTg_freq[:,0,:] = get_CTX( 'g',freq, lmax, isw = True, cib=True, tsz=True)
                 CTv_freq[:,0,:] = get_CTX( 'vr',freq, lmax, isw = True, cib=False, tsz=False)
                 CTtaud_freq[:,0,:] = get_CTX( 'taud',freq, lmax, isw = True, cib=False, tsz=False)
@@ -1081,7 +1101,7 @@ if __name__ == '__main__':
           
         else:
             
-            print("Computing Cls.")
+            print("Computing Cls.",flush=True)
             
             if args.lmax is None:
                 parser.print_help()
@@ -1091,7 +1111,7 @@ if __name__ == '__main__':
             tag1 = args.tracer1
             tag2 = args.tracer2
             
-            print("Computing "+tag1+"-"+tag2+" Cl")
+            print("Computing "+tag1+"-"+tag2+" Cl",flush=True)
 
             if args.tracer1 is None or args.tracer2 is None:
                 parser.print_help()
@@ -1126,11 +1146,11 @@ if __name__ == '__main__':
                 #Set up frequencies
                 
                 if tag1 == 'CIB':
-                    Fq1 = freqs()
+                    Fq1 = freqs(CMB_experiment)
                 else:
                     Fq1 = [None]
                 if tag2 == 'CIB':
-                    Fq2 = freqs()
+                    Fq2 = freqs(CMB_experiment)
                 else:
                     Fq2 = [None]
                     
@@ -1138,7 +1158,7 @@ if __name__ == '__main__':
                 
                 #First lets do all the halo model calculations 
                 
-                power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse)
+                power_spectra(tag1,tag2,Fq1,Fq2,ell_sparse,frequencies=freqs(CMB_experiment))
 
 
                 for fq1 in Fq1:
@@ -1191,7 +1211,21 @@ if __name__ == '__main__':
                             Ns_ell = c.load(basic_conf,'Nlshot_g_g_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('g','g',conf))
                             c.dump(basic_conf, CLS,'Cl_g_g_noshot_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('g','g',conf))
                             CLS += Ns_ell
-                                                        
+                        
+                        if tag1 == 'CIB' and tag2== 'CIB':
+                            if fq1==fq2:
+                                Ns_ell = c.load(basic_conf,'Nlshot_CIB('+str(fq1)+')_CIB('+str(fq2)+')_lmax='+str(lmax) ,dir_base = 'Cls/'+c.direc('CIB','CIB',conf))
+                            else:
+                                Ns_ell1 = c.load(basic_conf,'Nlshot_CIB('+str(fq1)+')_CIB('+str(fq1)+')_lmax='+str(lmax) ,dir_base = 'Cls/'+c.direc('CIB','CIB',conf))
+                                Ns_ell2 = c.load(basic_conf,'Nlshot_CIB('+str(fq2)+')_CIB('+str(fq2)+')_lmax='+str(lmax) ,dir_base = 'Cls/'+c.direc('CIB','CIB',conf))
+                                Ns_ell = np.sqrt(Ns_ell1*Ns_ell2)
+                            c.dump(basic_conf, CLS,'Cl_CIB('+str(fq1)+')_CIB('+str(fq2)+')_noshot_lmax='+str(lmax), dir_base = 'Cls/'+c.direc('CIB','CIB',conf))
+                            print("test",fq1,fq2)
+                            print(CLS,Ns_ell)
+                            CLS += Ns_ell
+
+
+                                
                         #Build labels
                         label1 = ''
                         label2 = ''
@@ -1201,14 +1235,14 @@ if __name__ == '__main__':
                             label2 += '('+str(fq2)+')'        
                             
                         if tag1 == 'tSZ' and tag2 != 'tSZ':
-                            for f in freqs():
+                            for f in freqs(CMB_experiment):
                                 c.dump(basic_conf, CLS*f_tSZ(f),'Cl_tSZ'+'('+str(f)+')'+'_'+tag2+label2+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc(tag1,tag2,conf))
                         elif tag1 != 'tSZ' and tag2 == 'tSZ':
-                            for f in freqs():
+                            for f in freqs(CMB_experiment):
                                 c.dump(basic_conf, CLS*f_tSZ(f),'Cl_'+tag1+label1+'_tSZ'+'('+str(f)+')'+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc(tag1,tag2,conf))     
                         elif tag1 == 'tSZ' and tag2 == 'tSZ':
-                            for f1 in freqs():
-                                for f2 in freqs():
+                            for f1 in freqs(CMB_experiment):
+                                for f2 in freqs(CMB_experiment):
                                     c.dump(basic_conf, CLS*f_tSZ(f1)*f_tSZ(f2),'Cl'+'_tSZ'+'('+str(f1)+')'+'_tSZ'+'('+str(f2)+')'+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc(tag1,tag2,conf))    
                         else:
                             c.dump(basic_conf, CLS,'Cl_'+tag1+label1+'_'+tag2+label2+'_lmax='+str(lmax), dir_base = 'Cls/'+c.direc(tag1,tag2,conf))
