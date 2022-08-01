@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
+import pickle
 import numpy as np
 from scipy.interpolate import interp1d
 import time
@@ -14,14 +14,16 @@ from scipy.linalg import cholesky
 from scipy import linalg
 import healpy
 
+import noisegen as ng
 
+import time
 class estimator(object):
     
     #####################################################################
     ############ CLASS SET UP AND CL TOOLS
     #####################################################################
     
-    def __init__(self, data_lmax = None, conf_module = None) :
+    def __init__(self, data_lmax = None, conf_module = None,lss = 'g',CMB_experiment='SO',recon_freq=143) :
         
         if conf_module != None:
             self.conf = conf_module
@@ -46,10 +48,11 @@ class estimator(object):
         self.csm = self.zb.csm        
         self.deltachi = self.zb.deltachi
         self.nbin = self.conf.N_bins
-        
+        self.nbin_tracer = self.conf.N_bins_tracer 
         self.N_fine_modes = self.conf.N_bins  
-        self.lss = 'g'
-        
+        self.lss = lss 
+        self.CMB_experiment = CMB_experiment
+        self.recon_freq = 143 
         self.use_cholesky = False
         self.realnum = 1
         self.lcut_num = 0
@@ -74,6 +77,10 @@ class estimator(object):
         print('lss reset to '+str(self.lss))
         
     def load_theory_Cl(self,tag1,tag2):   
+         
+        if ('CIB' in tag1 and tag2=='vr') or ('CIB' in tag2 and tag1=='vr'):
+             return np.zeros((1,self.nbin,self.data_lmax+1))
+
         if c.exists(self.basic_conf_dir,'Cl_'+tag1+'_'+tag2+'_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc(tag1,tag2,self.conf)):
             return c.load(self.basic_conf_dir,'Cl_'+tag1+'_'+tag2+'_lmax='+str(self.data_lmax), dir_base = 'Cls/'+c.direc(tag1,tag2,self.conf))
         else:
@@ -82,27 +89,48 @@ class estimator(object):
 
     def load_L(self,):
         return c.load(self.basic_conf_dir,'L_sample_lmax='+str(self.data_lmax), dir_base = 'Cls')
-    
-    def set_theory_Cls(self, add_ksz = True, add_ml = True, add_lensing =True ,use_cleaned = False, frequency = None, get_haar = False):
 
+    def set_theory_Cls(self,Cls_dict=None,add_ksz = True, add_ml = True, add_lensing =True ,use_cleaned = False, frequency = None, get_haar = False,CIB_freqs=None,include_Tlss=True,include_primaryCMB=True):
+
+        if Cls_dict is not None:
+            #if you pass in a dict of Cls, just use this
+            #TODO: maybe add an assert 'xx' in Cls_dict.keys() to check that the correct Cls are in the dict?
+
+            self.Cls = Cls_dict
+        else:
+            #otherwise, go to the old function
+            self.set_precomputed_Cls(add_ksz = add_ksz, add_ml=add_ml, add_lensing = add_lensing,use_cleaned = use_cleaned,frequency=frequency,get_haar = get_haar,CIB_freqs = CIB_freqs,include_Tlss = include_Tlss,include_primaryCMB=include_primaryCMB)
+             
+ 
+    def set_precomputed_Cls(self,add_ksz = True, add_ml = True, add_lensing =True ,use_cleaned = False, frequency = None, get_haar = False,CIB_freqs=None,include_Tlss=True,include_primaryCMB=True):
+        #this used to be called set_theory_Cls() 
         #frequency is only used if use_cleaned = False. If None, you have primary CMB + a simple gaussian white noise with beam. If you
         #use a frequency, at the moment it should be a SO one. 
         
         if use_cleaned:
-            self.estim_dir = 'estim/'+c.get_hash(c.get_basic_conf(self.conf, exclude = False))+'/T_cleaned/'
+            self.estim_dir = 'estim/'+c.get_hash(c.get_basic_conf(self.conf, exclude = False))+'/'+self.lss+'_T_cleaned'+self.CMB_experiment+'/'
         else:
-            self.estim_dir = 'estim/'+c.get_hash(c.get_basic_conf(self.conf, exclude = False))+'/T_freq='+str(frequency)+'/'
+            self.estim_dir = 'estim/'+c.get_hash(c.get_basic_conf(self.conf, exclude = False))+'/'+self.lss+'_T_freq='+str(frequency)+self.CMB_experiment+'/'
             
         
         self.Cls['lss-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl(self.lss,self.lss),self.load_L())
+
+
+             
+
         self.Cls['pCMB-pCMB'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('pCMB','pCMB'), c.load(self.basic_conf_dir,'L_pCMB_lmax='+str(self.data_lmax), dir_base = 'Cls'))
-        
+        if not include_primaryCMB:
+             self.Cls['pCMB-pCMB']  *= 0
         if add_lensing:
             self.Cls['lensing-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing',self.lss), self.load_L())
             self.Cls['lensing-lensing'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('lensing','lensing'), self.load_L())
         
         if add_ksz:       
-            self.Cls['taud-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('taud',self.lss),self.load_L())
+            try:
+                self.Cls['taud-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('taud',self.lss),self.load_L())
+            except:
+                self.Cls['taud-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl(self.lss,'taud'),self.load_L())
+
             self.Cls['taud-taud'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('taud','taud'),self.load_L())
             self.Cls['vr-vr'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('vr','vr'), self.load_L())
             self.Cls['taud-vr'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('taud','vr'), self.load_L())
@@ -119,7 +147,10 @@ class estimator(object):
             print("Using clean TT")       
             self.Ttag = 'Tc'
             self.Cls['T-T']   =  loginterp.log_interpolate_matrix(self.load_theory_Cl('Tc','Tc'),self.load_L())
-            self.Cls['T-lss'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('Tc',self.lss),self.load_L())
+            if self.include_Tlss:
+                self.Cls['T-lss'] =  loginterp.log_interpolate_matrix(self.load_theory_Cl('Tc',self.lss),self.load_L())
+            else:
+                self.Cls['T-lss'] = np.zeros((self.Cls['T-T'].shape[0],self.Cls['T-T'].shape[1],self.Cls['lss-lss'].shape[1]))
             self.Cls['lss-T'] =  np.transpose(self.Cls['T-lss'], axes =[0,2,1])  
             
         else:  
@@ -131,9 +162,14 @@ class estimator(object):
                 self.dT   = self.conf.noiseTuKArcmin_T*np.pi/180./60./self.conf.T_CMB
 
                 self.Cls['T-T'] = self.Cls['pCMB-pCMB']\
-                                    +self.CMB_noise(np.arange(self.data_lmax+1),self.beam, self.dT)          
-                self.Cls['T-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('isw_lin',self.lss), self.load_L())
-                self.Cls['lss-T'] = loginterp.log_interpolate_matrix(self.load_theory_Cl(self.lss,'isw_lin'), self.load_L())        
+                                    +0*self.CMB_noise(np.arange(self.data_lmax+1),self.beam, self.dT)          
+                if self.include_Tlss:
+                    self.Cls['T-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('isw_lin',self.lss), self.load_L())
+                    self.Cls['lss-T'] = loginterp.log_interpolate_matrix(self.load_theory_Cl(self.lss,'isw_lin'), self.load_L())
+
+                else:
+                    self.Cls['T-lss'] = np.zeros((self.Cls['T-T'].shape[0],self.Cls['T-T'].shape[1],self.Cls['lss-lss'].shape[1]))
+                    self.Cls['lss-T'] = np.zeros((self.Cls['T-T'].shape[0],self.Cls['lss-lss'].shape[1],self.Cls['T-T'].shape[1]))#loginterp.log_interpolate_matrix(self.load_theory_Cl(self.lss,'isw_lin'), self.load_L())        
             
             else:
                 try:
@@ -147,7 +183,7 @@ class estimator(object):
                 self.dT   = self.dTs[idx]*np.pi/180./60./self.conf.T_CMB
 
                 self.Cls['T-T'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('T('+str(frequency)+')','T('+str(frequency)+')'),self.load_L())\
-                                    +self.CMB_noise(np.arange(self.data_lmax+1),self.beam, self.dT)          
+                                    +0*self.CMB_noise(np.arange(self.data_lmax+1),self.beam, self.dT)          
                 self.Cls['T-lss'] = loginterp.log_interpolate_matrix(self.load_theory_Cl('T('+str(frequency)+')',self.lss), self.load_L())
                 self.Cls['lss-T'] = loginterp.log_interpolate_matrix(self.load_theory_Cl(self.lss,'T('+str(frequency)+')'), self.load_L())
             
@@ -157,6 +193,15 @@ class estimator(object):
         if add_ml:
             self.Cls['T-T'] += self.Cls['ML-ML']
             
+
+        if CIB_freqs is not None:
+            for freq in CIB_freqs:
+                 for freq2 in CIB_freqs:
+                     try:
+                         self.Cls['CIB'+str(freq)+'-''CIB'+str(freq2)] = loginterp.log_interpolate_matrix(self.load_theory_Cl('CIB('+str(freq)+')','CIB('+str(freq2)+')'), self.load_L())
+                     except:
+                         self.Cls['CIB'+str(freq)+'-''CIB'+str(freq2)] = loginterp.log_interpolate_matrix(self.load_theory_Cl('CIB('+str(freq2)+')','CIB('+str(freq)+')'), self.load_L())
+
         if get_haar:
             
             print("Getting fine mode spectra")
@@ -290,7 +335,7 @@ class estimator(object):
                         
             return G
         
-        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom':
+        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom'or 'CIB' in  self.conf.LSSexperiment:
         
             CTT     = self.Cls['T-T'][:,0,0]
             CTlss   = self.Cls['T-lss'][:,0,0]    
@@ -336,7 +381,7 @@ class estimator(object):
                         
                         if self.conf.LSSexperiment == 'LSST':
                             terms += self.f(tag_f, alpha, gamma, ell, ell_1, ell_2, Ae = Ae)*self.g(tag_g, alpha, ell, ell_1, ell_2, Ae = Ae)
-                        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom':
+                        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom' or 'CIB' in  self.conf.LSSexperiment: 
                             terms += self.f(tag_f, 0, gamma, ell, ell_1, ell_2, Ae = Ae)*self.g(tag_g, alpha, ell, ell_1, ell_2, Ae = Ae)
                         else:
                             raise Exception("LSS experiment not valid")
@@ -350,6 +395,9 @@ class estimator(object):
                     c =   np.sum(I)
                 else:
                     #Ignore last couple ell cause they can be problematic, regardless of lmax
+                    #print(L_int.shape,np.asarray(a).shape)
+                    if len(np.asarray(a).shape)==3:
+                        a = np.asarray(a)[:,0,0]
                     I = interp1d(L_int[:-2] ,np.asarray(a)[:-2], kind = 'linear',bounds_error=False,fill_value=0)(np.arange(lmax+1))
                     c =   np.sum(I)
                     
@@ -387,7 +435,7 @@ class estimator(object):
                 
                 a.append(terms)
         
-        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom':
+        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom' or 'CIB' in  self.conf.LSSexperiment:
             
             Clsslss_alpha_gamma  = self.Cls['lss-lss'][:,0,0]
             CTT                  = self.Cls['T-T'][:,0,0]
@@ -411,7 +459,10 @@ class estimator(object):
         else:
             raise Exception("LSS experiment not valid")
                         
-                    
+        #print(L.shape,np.asarray(a).shape)
+        if len(np.asarray(a).shape)==3:
+               a = np.asarray(a)[:,0,0]
+ 
         I = interp1d(L[:-2] ,np.asarray(a)[:-2], kind = 'linear',bounds_error=False,fill_value=0)(np.arange(lmax+1))
         
         
@@ -904,10 +955,14 @@ class estimator(object):
         
         
         for i in range(nbin):
-            
-            Cltaudd = cltaudlssbinned[:,i,i]*bin_width
-            Cldd = cllsslssbinned[:,i,i]
-            ClTd = clTlssbinned[:,0,i]
+            if 'CIB' in  self.conf.LSSexperiment: 
+                Cltaudd = cltaudlssbinned[:,i,0]*bin_width
+                Cldd = cllsslssbinned[:,0,0]
+                ClTd = clTlssbinned[:,0,0]
+            else:
+                Cltaudd = cltaudlssbinned[:,i,i]*bin_width
+                Cldd = cllsslssbinned[:,i,i]
+                ClTd = clTlssbinned[:,0,i]
     
             dlm_in = healpy.almxfl(healpy.map2alm(lssfield[i]),cut)
             
@@ -1109,291 +1164,443 @@ class estimator(object):
         return binned_qe
 
 
-    
-    def get_qe_vr_sims(self,nside, nsideout, n_level, use_cleaned = True, frequency = None, mask = False):
+     # def more_accessible_create_maps() 
+         #maps = ...
+         #return maps 
+     # def reconstruct(maps):
+         # reconstruction=...
+         #return reconstruction
+
         
-        
-        self.set_theory_Cls(add_ksz = True, add_ml = False, use_cleaned = use_cleaned, frequency = frequency)
-            
-        lcut = 3*nside-self.lcut_num
-        
-        if use_cleaned:
-            beam_window = np.ones(3*nside)   # We have to determine how to work the beaming here
-        else:        
-            ls = np.arange(3*nside)
-            beam_window = np.exp(-ls*(ls+1)*(self.beam**2)/(16.*np.log(2)))
-        
-        clTT      = self.Cls['T-T'][:3*nside,0,0]
-        clTlss    = self.Cls['T-lss'][:3*nside]
-        cltaudlss = self.Cls['taud-lss'][:3*nside]
-        cllsslss  = self.Cls['lss-lss'][:3*nside]
-        clksz     = self.Cls['kSZ-kSZ'][:3*nside,0,0]
-        
- 
-        #GET THEORY NOISE . ONE CAN SPEED UP THIS ASSUMING ELL DEPENDENCE
-        
-        print("Getting theory noise")
-        
-        if c.exists(self.basic_conf_dir,'Nvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'): 
+
+    def load_or_calculate_and_save_noise(self,nside,nsideout,lcut,force_recalculate=True,save=False,fast=False,diagonal=True):
+        if force_recalculate:
+            self.cs={}
+        if c.exists(self.basic_conf_dir,'Nvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims') and not force_recalculate:
+            print("loading precomputed noise")
             Noise = c.load(self.basic_conf_dir,'Nvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
         else:
-            
+            print("calculating noise")
             Lsamp = np.unique(np.append(np.geomspace(1,3*nsideout-1,20).astype(int),3*nsideout-1))
-            Noise_int = np.zeros((len(Lsamp),self.nbin)) 
-             
-            for lid, l  in enumerate(Lsamp):
-                for i in np.arange(self.nbin):
-                    Noise_int[lid,i] = self.Noise_iso(lcut, 'vr', i, i, l)
-                
-            Noise = np.swapaxes(loginterp.log_interpolate_vector(Noise_int, Lsamp),0,1)
-            
-            c.dump(self.basic_conf_dir,Noise,'Nvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-            
-        print("Theory noise ready")  
-        
-        real_num = self.realnum
-                
-        for r in np.arange(real_num):
-            
-            print('real = '+str(r))
-            
-            if c.exists(self.basic_conf_dir,'qe_vr_'+str(nside)+'_'+str(nsideout)
-                        +'_full'+'_real='+str(r)+'_mask='+str(mask)
-                        +'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'): 
-                print("r = "+str(r)+" already done")
-                continue
-                     
-                
-            if c.exists(self.basic_conf_dir,'ksz_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims'):
-                
-                print("Loading pre-existing sims")
-                
-                lssmaps  = np.zeros((self.nbin,healpy.nside2npix(nside)))      
-                for b in np.arange(self.nbin):   
-                    lssmaps[b,:] = c.load(self.basic_conf_dir,'lss_vr_'+str(nside)+'_real='+str(r)+'_bin='+str(b), dir_base = self.estim_dir+'sims')
-   
-                Tmap = c.load(self.basic_conf_dir,self.Ttag+'_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')
-                kszmap = c.load(self.basic_conf_dir,'ksz_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims')
+            if diagonal:
+                Noise_int = np.zeros((len(Lsamp),self.nbin))
             else:
-                
-                print("Getting sims")
-                
-                if use_cleaned == True:
-                
-                    sims, alms = self.get_maps_and_alms(['vr','taud','g'],nside,3*nside)    
-                    vmaps    = sims[0]
-                    taudmaps = sims[1]
-                    lssmaps  = sims[2]
-                    Tmap    = healpy.synfast(loginterp.log_interpolate_matrix(self.load_theory_Cl('Tc', 'Tc'), self.load_L())[:3*nside,0,0],nside)  #sims[3][0,:]    
-                    kszmap = self.ksz_map_maker(taudmaps, vmaps, nside)
-                    
+                Noise_int = np.zeros((len(Lsamp),self.nbin,self.nbin))
+            if fast:
+                if diagonal:
+                    for i in np.arange(self.nbin):
+                        noisebin = self.Noise_iso(lcut, 'vr', i, i, 2)
+                        for lid, l in enumerate(Lsamp):
+                            Noise_int[lid,i] = noisebin
                 else:
-                    
-                    if self.Ttag != 'T0':
-
-                        sims, alms = self.get_maps_and_alms(['vr','taud','g',self.Ttag],nside,3*nside)  
-                        vmaps    = sims[0]
-                        taudmaps = sims[1]
-                        lssmaps  = sims[2]
-                        Tmap    = sims[3][0,:]
-                        kszmap = self.ksz_map_maker(taudmaps, vmaps, nside)
-                
-                    else:
-                        
-                        sims, alms = self.get_maps_and_alms(['vr','taud','g'],nside,3*nside)  
-                        vmaps    = sims[0]
-                        taudmaps = sims[1]
-                        lssmaps  = sims[2]
-                        Tmap    =  healpy.synfast(self.Cls['pCMB-pCMB'][:3*nside,0,0],nside)
-                        kszmap = self.ksz_map_maker(taudmaps, vmaps, nside)
-                
-
-                
-                vactual= np.zeros((self.nbin,healpy.nside2npix(nsideout)))
-  
-                for i in np.arange(self.nbin):
-                    vactual[i,:]  = healpy.pixelfunc.ud_grade(vmaps[i,:], nside_out = nsideout)  #update R so it also depends on ell
-                    c.dump(self.basic_conf_dir,lssmaps[i,:],'lss_vr_'+str(nside)+'_real='+str(r)+'_bin='+str(i), dir_base = self.estim_dir+'sims')
-                 
-                c.dump(self.basic_conf_dir,vactual,'vr_actual_'+str(nside)+'_'+str(nsideout)+'_real='+str(r), dir_base = self.estim_dir+'sims')
-                c.dump(self.basic_conf_dir,Tmap,self.Ttag+'_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')       
-                c.dump(self.basic_conf_dir, kszmap,'ksz_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims')
-                
-
-            if use_cleaned:
-                Tfield_gauss = healpy.synfast(clksz,nside)+Tmap
-                Tfield_full =  kszmap + Tmap
+                    for i in np.arange(self.nbin): 
+                        for j in np.arange(0,i+1):
+                            for lid, l in enumerate(Lsamp):
+                                noisebinbin = self.Noise_iso(lcut,'vr',i,j,2)
+                                Noise_int[lid,i,j] = Noise_int[lid,j,i] = noisebinbin
+          
             else:
-                Tfield_gauss = healpy.smoothing(healpy.synfast(clksz,nside) + Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)  
-                Tfield_full =  healpy.smoothing(kszmap + Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)  
+                for lid, l  in enumerate(Lsamp):
+                    print(l)
+                    if diagonal:
+                        for i in np.arange(self.nbin):
+                            Noise_int[lid,i] = self.Noise_iso(lcut, 'vr', i, i, l)
+                    else:
+                        for i in np.arange(self.nbin):
+                            for j in np.arange(0,i+1):
+                                Noise_int[lid,i,j] = Noise_int[lid,j,i] = self.Noise_iso(lcut,'vr',i,j,l)
+            if diagonal:
+                Noise = np.swapaxes(loginterp.log_interpolate_vector(Noise_int, Lsamp),0,1)
+            else:
+                Noise = np.transpose(loginterp.log_interpolate_matrix(Noise_int, Lsamp),(1,2,0))
+            if save:
+                print('saving noise')
+                c.dump(self.basic_conf_dir,Noise,'Nvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
 
-            
-            clTT[0:100]    =0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
-            cllsslss[0:100]=0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
-            
-            if mask:
-                Tfield_gauss = Tfield_gauss*np.load('data/mask_'+str(nside)+'.npy')
-                Tfield_full  = Tfield_full*np.load('data/mask_'+str(nside)+'.npy')
-                lssmaps = lssmaps*np.load('data/mask_'+str(nside)+'.npy')
-                                    
-            print("Reconstructing velocity")
+        print("Theory noise ready")
+        return Noise
+
+    def load_or_create_and_save_gaussian_sims(self,r,nside,nsideout,lcut,mask,n_level,use_cleaned,force_recalculate=True,save=False,include_primaryCMB = True):
+                clTT      = self.Cls['T-T'][:3*nside,0,0].copy()
+                clTlss   = self.Cls['T-lss'][:3*nside].copy()
+                cltaudlss = self.Cls['taud-lss'][:3*nside].copy()
+                cllsslss  = self.Cls['lss-lss'][:3*nside].copy()
+                clksz     = self.Cls['kSZ-kSZ'][:3*nside,0,0].copy()
+                if not include_primaryCMB:
+                   CMB_mult = 0
+                else:
+                   CMB_mult = 1
+
+                print('real = '+str(r))
+
+                if c.exists(self.basic_conf_dir,'qe_vr_'+str(nside)+'_'+str(nsideout)
+                        +'_full'+'_real='+str(r)+'_mask='+str(mask)
+                        +'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'):
+                    print("r = "+str(r)+" already done")
+
+                if c.exists(self.basic_conf_dir,'ksz_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims') and not force_recalculate:
+
+                    print("Loading pre-existing sims")
+
+                    lssmaps  = np.zeros((self.nbin,healpy.nside2npix(nside)))
+                    for b in np.arange(self.nbin):
+                        if 'CIB' in  self.conf.LSSexperiment:
+                            lssmaps[b,:] = c.load(self.basic_conf_dir,self.lss+'_vr_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')
+                        else:
+                            lssmaps[b,:] = c.load(self.basic_conf_dir,self.lss+'_vr_'+str(nside)+'_real='+str(r)+'_bin='+str(b), dir_base = self.estim_dir+'sims')
+
+                    print("lss loaded")
+                    Tmap = c.load(self.basic_conf_dir,self.Ttag+'_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')
+                    print("tmap loaded")
+                    kszmap = c.load(self.basic_conf_dir,'ksz_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims')
+                    print('ksz loaded')
+
+                else:
+
+                    print("Getting sims")
+
+                    if use_cleaned == True:
+
+                        sims, alms = self.get_maps_and_alms(['vr','taud',self.lss],nside,3*nside)
+                        vmaps    = sims[0]
+                        taudmaps = sims[1]
+                        lssmaps  = sims[2]
+                        Tmap    = healpy.synfast(loginterp.log_interpolate_matrix(self.load_theory_Cl('Tc', 'Tc'), self.load_L())[:3*nside,0,0],nside)  #sims[3][0,:]    
+                        kszmap = self.ksz_map_maker(taudmaps, vmaps, nside)
+
+                    else:
+
+                        if self.Ttag != 'T0':
+
+                            sims, alms = self.get_maps_and_alms(['vr','taud',self.lss,self.Ttag],nside,3*nside)
+                            vmaps    = sims[0]
+                            taudmaps = sims[1]
+                            lssmaps  = sims[2]
+                            Tmap    = sims[3][0,:]
+                            kszmap = self.ksz_map_maker(taudmaps, vmaps, nside)
+
+                        else:
+
+                            sims, alms = self.get_maps_and_alms(['vr','taud',self.lss],nside,3*nside)
+                            vmaps    = sims[0]
+                            taudmaps = sims[1]
+                            lssmaps  = sims[2]
+                            Tmap    =  healpy.synfast(self.Cls['pCMB-pCMB'][:3*nside,0,0],nside)
+                            kszmap = self.ksz_map_maker(taudmaps, vmaps, nside)
+
+                    vactual= np.zeros((self.nbin,healpy.nside2npix(nsideout)))
+
+                    for i in np.arange(self.nbin):
+                        vactual[i,:]  = healpy.pixelfunc.ud_grade(vmaps[i,:], nside_out = nsideout)  #update R so it also depends on ell
+                    for i in np.arange(self.nbin_tracer):
+
+                        c.dump(self.basic_conf_dir,lssmaps[i,:],self.lss+'_vr_'+str(nside)+'_real='+str(r)+'_bin='+str(i), dir_base = self.estim_dir+'sims')
+
+                    if 'CIB' in  self.conf.LSSexperiment:
+
+                        lssmaps  = np.zeros((self.nbin,healpy.nside2npix(nside)))
+                        for b in np.arange(self.nbin):
+                            lssmaps[b,:] = c.load(self.basic_conf_dir,self.lss+'_vr_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')
+
+
+                    print("saving sims")
+                    c.dump(self.basic_conf_dir,vactual,'vr_actual_'+str(nside)+'_'+str(nsideout)+'_real='+str(r), dir_base = self.estim_dir+'sims')
+                    c.dump(self.basic_conf_dir,Tmap,self.Ttag+'_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')
+                    c.dump(self.basic_conf_dir, kszmap,'ksz_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims')
+
+                if use_cleaned:
+                    Tfield_gauss = healpy.synfast(clksz,nside)+Tmap*CMB_mult
+                    Tfield_full =  kszmap + Tmap*CMB_mult
+                else:
+                    Tfield_gauss = healpy.smoothing(healpy.synfast(clksz,nside) + CMB_mult*Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)
+                    Tfield_full =  healpy.smoothing(kszmap + CMB_mult*Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)
+                clTT[0:100]    =0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
+                cllsslss[0:100]=0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
+                if not (mask is False or mask is not None):
+
+                    from astropy.io import fits
+                    maskfile = '/mnt/ceph/users/fmccarthy/comp_separation/PLA/masks/HFI_Mask_GalPlane-apo0_2048_R2.00.fits'
+
+                    maskf = healpy.fitsfunc.read_map(maskfile)
+                    maskf = fits.open(maskfile)
+                    maskhp = maskf['GAL-MASK'].data[mask] #mask should be eg 'GAL080'
+                    maskhp = healpy.pixelfunc.reorder(maskhp,inp='NEST',out='RING')
+                    Tfield_gauss = Tfield_gauss*maskhp
+                    Tfield_full  = Tfield_full*maskhp
+                    lssmaps = lssmaps*maskhp
+                return Tfield_gauss,Tfield_full,lssmaps
+                                                               
                 
-            qe_gauss = self.reconstruct_vr(nside, nsideout, n_level, self.nbin, self.deltachi, Tfield_gauss, lssmaps,  beam_window, cllsslss, clTT, clTlss, cltaudlss,Noise,lcut)
-            qe_full = self.reconstruct_vr(nside, nsideout, n_level, self.nbin, self.deltachi, Tfield_full, lssmaps,  beam_window, cllsslss, clTT, clTlss, cltaudlss,Noise,lcut)
-    
-            c.dump(self.basic_conf_dir,qe_gauss,'qe_vr_'+str(nside)+'_'+str(nsideout)+'_gauss'+'_real='+str(r)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-            c.dump(self.basic_conf_dir,qe_full,'qe_vr_'+str(nside)+'_'+str(nsideout)+'_full'+'_real='+str(r)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-        
-        pass
-    
-    def get_qe_vt_sims(self,nside, nsideout, n_level, use_cleaned = True, frequency = None, mask = False):
-        
-        
-        self.set_theory_Cls(add_ksz = False, add_ml = True, use_cleaned = use_cleaned, frequency = frequency)
-            
+
+    def get_qe_vr_sims(self,nside, nsideout, n_level, use_cleaned = True, frequency = None, mask = False,add_lensing=False,calculatenoise=True,getsims=True,reconstruct_velocity=True,recalculate_sims=False,include_primaryCMB=True,test_t=False):
+
+        # maps = more_accessible_create_maps()
+        # noise = calculate_noise()
+        # reconstruction = reconstruct(maps)
+        # add maxL 
+        # talk to Moritz about adding his student's code
+
+        self.set_theory_Cls(add_ksz = True, add_ml = False, use_cleaned = use_cleaned, frequency = frequency,add_lensing=add_lensing,include_primaryCMB =  include_primaryCMB)
+        clTT      = self.Cls['T-T'][:3*nside,0,0].copy()
+        clTlss    = self.Cls['T-lss'][:3*nside].copy()
+        cltaudlss = self.Cls['taud-lss'][:3*nside].copy()
+        cllsslss  = self.Cls['lss-lss'][:3*nside].copy()
+        clksz     = self.Cls['kSZ-kSZ'][:3*nside,0,0].copy()
+
+
         lcut = 3*nside-self.lcut_num
-        
         if use_cleaned:
             beam_window = np.ones(3*nside)   # We have to determine how to work the beaming here
-        else:        
+        else:
+            ls = np.arange(3*nside)
+            lmax_tt= self.Cls['T-T'].shape[0]
+            if self.CMB_experiment =='SO':
+                noisefunc = ng.SOlike_noise_spec
+                cmbnoise=True
+            elif self.CMB_experiment =='Planck':
+                noisefunc = ng.Plancklike_noise_spec
+                cmbnoise=True
+            elif 'whitenoise' in self.CMB_experiment:
+                beam_window = np.ones(3*nside)
+                CMB_noise = np.ones(self.Cls['T-T'].shape)*float(self.CMB_experiment[10:])
+                cmbnoise = True
+            else:
+                cmbnoise = False
+
+            if cmbnoise:
+                if 'whitenoise' not in self.CMB_experiment:
+                    beam_window = np.ones(3*nside)
+                    CMB_noise = (noisefunc(np.array([self.recon_freq]),np.array([int( x) for x in np.arange(0,lmax_tt)]))/self.conf.T_CMB**2)[0][:,None,None]
+            else:
+                beam_window = np.exp(-ls*(ls+1)*(self.beam**2)/(16.*np.log(2)))
+                CMB_noise = 0*self.Cls['T-T']
+
+            CMB_noise[0,:,:]=0
+
+            self.Cls['T-T'] = self.Cls['T-T'].copy()+CMB_noise
+            self.Cls['Tnoise-Tnoise']  = CMB_noise
+            if 'CIB' in self.lss:
+                CIBfreq = int(self.lss[self.lss.index('(')+1:-1])
+                CIB_noise = (noisefunc(np.array([CIBfreq]),np.array([int( x) for x in np.arange(0,lmax_tt)]))/self.conf.T_CMB**2)[0]
+                CIB_noise[0]=0
+                self.Cls['lss-lss'] =  self.Cls['lss-lss'].copy() + CIB_noise[:,None,None]
+
+
+        clTT      = self.Cls['T-T'][:3*nside,0,0].copy()
+        clTlss    = self.Cls['T-lss'][:3*nside].copy()
+        cltaudlss = self.Cls['taud-lss'][:3*nside].copy()
+        cllsslss  = self.Cls['lss-lss'][:3*nside].copy()
+        clksz     = self.Cls['kSZ-kSZ'][:3*nside,0,0].copy()
+        #GET THEORY NOISE . ONE CAN SPEED UP THIS ASSUMING ELL DEPENDENCE
+        Noise = self.load_or_calculate_and_save_noise(nside,nsideout,lcut,force_recalculate = calculatenoise,save=True)
+
+        real_num = self.realnum
+        for r in np.arange(self.real_num):
+
+            if getsims:
+                 Tfield_gauss,Tfield_full,lssmaps = self.load_or_create_and_save_gaussian_sims(r,nside,nsideout,lcut,mask,n_level,use_cleaned,force_recalculate = recalculate_sims,save=True,include_primaryCMB = include_primaryCMB)
+
+            if reconstruct_velocity:
+                print("Reconstructing velocity")
+                if self.CMB_experiment in ['SO','Planck'] or 'whitenoise' in self.CMB_experiment:
+                        print("simulating noise")
+                        T_noise = healpy.synfast(CMB_noise[:,0,0],nside)
+                        Tfield_gauss += T_noise
+                        Tfield_full += T_noise
+                        if 'CIB' in self.lss:
+
+                            CIB_noise_map = healpy.synfast(CIB_noise,nside)
+                            lssmaps += CIB_noise_map
+
+                        print("noise done")
+                qe_gauss = self.reconstruct_vr(nside, nsideout, n_level, self.nbin, self.deltachi, Tfield_gauss, lssmaps,  beam_window, cllsslss, clTT, clTlss, cltaudlss,Noise,lcut)
+                qe_full = self.reconstruct_vr(nside, nsideout, n_level, self.nbin, self.deltachi, Tfield_full, lssmaps,  beam_window, cllsslss, clTT, clTlss, cltaudlss,Noise,lcut)
+
+                c.dump(self.basic_conf_dir,qe_gauss,'qe_vr_'+str(nside)+'_'+str(nsideout)+'_gauss'+'_real='+str(r)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+                c.dump(self.basic_conf_dir,qe_full,'qe_vr_'+str(nside)+'_'+str(nsideout)+'_full'+'_real='+str(r)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+        if test_t:
+            return Tfield_full
+        pass
+
+    def reconstruct_velocity_from_maps(self,Tfield,lssmaps,nsidein,nsideout,fast=False):
+
+         lcut = 3*nsidein-self.lcut_num
+
+         print("calculating noise")
+         Noise = self.load_or_calculate_and_save_noise(nsidein,nsideout,lcut,force_recalculate = True,save=False,fast=fast,diagonal=False)
+         Noise_diagonal = np.zeros((Noise.shape[0],Noise.shape[-1]))
+         for ellind in np.arange(0,Noise.shape[-1]):
+             Noise_diagonal[:,ellind] = Noise[:,:,ellind].diagonal()
+         print("done")
+         clTT      = self.Cls['T-T'][:3*nsidein,0,0]
+         clTlss    = self.Cls['T-lss'][:3*nsidein]
+         cltaudlss = self.Cls['taud-lss'][:3*nsidein]
+         cllsslss  = self.Cls['lss-lss'][:3*nsidein]
+         t1=time.time()
+         print("calculating reconstruction")
+         n_level = 0
+         
+         beam_window = np.ones(3*nsidein)
+
+         qe_full = self.reconstruct_vr(nsidein, nsideout, n_level, self.nbin, self.deltachi, Tfield, lssmaps,  beam_window, cllsslss, clTT, clTlss, cltaudlss,Noise_diagonal ,lcut)
+         print("done in",time.time()-t1)
+
+         R = self.load_or_calculate_and_save_rotation(nsidein,nsideout,lcut,force_recalculate = True,save=False)
+
+         return qe_full,Noise ,R
+    def get_qe_vt_sims(self,nside, nsideout, n_level, use_cleaned = True, frequency = None, mask = False):
+
+
+        self.set_theory_Cls(add_ksz = False, add_ml = True, use_cleaned = use_cleaned, frequency = frequency)
+
+        lcut = 3*nside-self.lcut_num
+
+        if use_cleaned:
+            beam_window = np.ones(3*nside)   # We have to determine how to work the beaming here
+        else:
             ls = np.arange(3*nside)
             beam_window = np.exp(-ls*(ls+1)*(self.beam**2)/(16.*np.log(2)))
-        
+
         clTT      = self.Cls['T-T'][:3*nside,0,0]
         clTlss    = self.Cls['T-lss'][:3*nside]
         clmllss = self.Cls['ml-lss'][:3*nside]
         cllsslss  = self.Cls['lss-lss'][:3*nside]
         clML    = self.Cls['ML-ML'][:3*nside,0,0]
-        
- 
+
+
         #GET THEORY NOISE . ONE CAN SPEED UP THIS ASSUMING ELL DEPENDENCE
-        
+
         print("Getting theory noise")
-        
-        if c.exists(self.basic_conf_dir,'Nvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'): 
+
+        if c.exists(self.basic_conf_dir,'Nvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'):
             Noise = c.load(self.basic_conf_dir,'Nvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
         else:
-            
+
             Lsamp = np.unique(np.append(np.geomspace(1,3*nsideout-1,20).astype(int),3*nsideout-1))
-            Noise_int = np.zeros((len(Lsamp),self.nbin)) 
-             
+            Noise_int = np.zeros((len(Lsamp),self.nbin))
+
             for lid, l  in enumerate(Lsamp):
                 for i in np.arange(self.nbin):
                     Noise_int[lid,i] = self.Noise_iso(lcut, 'vt', i, i, l)
-                
+
             Noise = np.swapaxes(loginterp.log_interpolate_vector(Noise_int, Lsamp),0,1)
-            
+
             c.dump(self.basic_conf_dir,Noise,'Nvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-            
-        print("Theory noise ready")  
-        
+
+        print("Theory noise ready")
+
         print("Getting rotation matrix ")
-        
-        if c.exists(self.basic_conf_dir,'Rvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'): 
+
+        if c.exists(self.basic_conf_dir,'Rvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'):
             R = c.load(self.basic_conf_dir,'Rvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
         else:
-            
-            R = np.zeros((self.nbin,self.nbin)) 
-             
+
+            R = np.zeros((self.nbin,self.nbin))
+
             for i in np.arange(self.nbin):
-                for j in np.arange(self.nbin):      
+                for j in np.arange(self.nbin):
                     R[i,j] = self.R(lcut,'vt','vt',i,j,2)
-                    
             c.dump(self.basic_conf_dir,R,'Rvtvt_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-            
-        print("Rotation matrix ready")  
-            
-        
+
+        print("Rotation matrix ready")
+
+
         real_num = self.realnum
-                
+
         for r in np.arange(real_num):
-            
+
             print('real = '+str(r))
-            
+
             if c.exists(self.basic_conf_dir,'qe_vt_'+str(nside)+'_'+str(nsideout)
                         +'_full'+'_real='+str(r)+'_mask='+str(mask)
-                        +'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'): 
+                        +'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'):
                 print("r = "+str(r)+" already done")
-                continue
-                     
-                
+
+
             if c.exists(self.basic_conf_dir,'ML_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims'):
-                
+
                 print("Loading pre-existing sims")
-                
-                lssmaps  = np.zeros((self.nbin,healpy.nside2npix(nside)))      
-                for b in np.arange(self.nbin):   
+
+                lssmaps  = np.zeros((self.nbin,healpy.nside2npix(nside)))
+                for b in np.arange(self.nbin):
                     lssmaps[b,:] = c.load(self.basic_conf_dir,'lss_vt_'+str(nside)+'_real='+str(r)+'_bin='+str(b), dir_base = self.estim_dir+'sims')
-   
+
                 Tmap = c.load(self.basic_conf_dir,self.Ttag+'_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')
                 MLmap = c.load(self.basic_conf_dir,'ML_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims')
             else:
-                
+
                 print("Getting sims")
-                
+
                 if use_cleaned == True:
-                
-                    sims, alms = self.get_maps_and_alms(['vt','ml','g'],nside,3*nside)    
+
+                    sims, alms = self.get_maps_and_alms(['vt','ml','g'],nside,3*nside)
                     vmaps    = sims[0]
                     lssmaps  = sims[2]
                     Tmap    = healpy.synfast(loginterp.log_interpolate_matrix(self.load_theory_Cl('Tc', 'Tc'), self.load_L())[:3*nside,0,0],nside)  #sims[3][0,:]    
                     MLmap = self.ml_map_maker(alms[0], alms[1],  nside)
-                    
+
                 else:
-                    
+
                     if self.Ttag != 'T0':
 
-                        sims, alms = self.get_maps_and_alms(['vt','ml','g',self.Ttag],nside,3*nside)  
+                        sims, alms = self.get_maps_and_alms(['vt','ml','g',self.Ttag],nside,3*nside)
                         vmaps    = sims[0]
                         lssmaps  = sims[2]
                         Tmap    = sims[3][0,:]
                         MLmap = self.ml_map_maker(alms[0], alms[1],  nside)
-                
                     else:
-                        
-                        sims, alms = self.get_maps_and_alms(['vt','ml','g'],nside,3*nside)  
+
+                        sims, alms = self.get_maps_and_alms(['vt','ml','g'],nside,3*nside)
                         vmaps    = sims[0]
                         lssmaps  = sims[2]
                         Tmap    =  healpy.synfast(self.Cls['pCMB-pCMB'][:3*nside,0,0],nside)
                         MLmap = self.ml_map_maker(alms[0], alms[1],  nside)
-    
+
                 vt_actual= np.zeros((self.nbin,healpy.nside2npix(nsideout)))
-  
+
                 for i in np.arange(self.nbin):
                     vt_actual[i,:]  = healpy.pixelfunc.ud_grade(vmaps[i,:], nside_out = nsideout)  #update R so it also depends on ell
                     c.dump(self.basic_conf_dir,lssmaps[i,:],'lss_vt_'+str(nside)+'_real='+str(r)+'_bin='+str(i), dir_base = self.estim_dir+'sims')
-                 
-                c.dump(self.basic_conf_dir,vt_actual,'vt_actual_'+str(nside)+'_'+str(nsideout)+'_real='+str(r), dir_base = self.estim_dir+'sims')
-                c.dump(self.basic_conf_dir,Tmap,self.Ttag+'_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')       
-                c.dump(self.basic_conf_dir, MLmap,'ML_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims')
-                
 
+                c.dump(self.basic_conf_dir,vt_actual,'vt_actual_'+str(nside)+'_'+str(nsideout)+'_real='+str(r), dir_base = self.estim_dir+'sims')
+                c.dump(self.basic_conf_dir,Tmap,self.Ttag+'_'+str(nside)+'_real='+str(r)+'_bin='+str(0), dir_base = self.estim_dir+'sims')
+                c.dump(self.basic_conf_dir, MLmap,'ML_'+str(nside)+'_real='+str(r), dir_base = self.estim_dir+'sims')
+
+            print("getting tfiels")
             if use_cleaned:
                 Tfield_gauss = healpy.synfast(clML,nside)+Tmap
                 Tfield_full =  MLmap + Tmap
             else:
-                Tfield_gauss = healpy.smoothing(healpy.synfast(clML,nside) + Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)  
-                Tfield_full =  healpy.smoothing(MLmap + Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)  
+                Tfield_gauss = healpy.smoothing(healpy.synfast(clML,nside) + Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)
+                Tfield_full =  healpy.smoothing(MLmap + Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)
 
-            
+
             clTT[0:100]    =0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
             cllsslss[0:100]=0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
-            
-            if mask:
-                Tfield_gauss = Tfield_gauss*np.load('data/mask_'+str(nside)+'.npy')
-                Tfield_full  = Tfield_full*np.load('data/mask_'+str(nside)+'.npy')
-                lssmaps = lssmaps*np.load('data/mask_'+str(nside)+'.npy')
-                                    
+
+            if mask is not None:
+                from astropy.io import fits
+                maskfile = '/mnt/ceph/users/fmccarthy/comp_separation/PLA/masks/HFI_Mask_GalPlane-apo0_2048_R2.00.fits'
+
+                maskf = hp.fitsfunc.read_map(maskfile)
+                maskf = fits.open(maskfile)
+                maskhp = maskf['GAL-MASK'].data[mask] #mask should be eg 'GAL080'
+                maskhp = hp.pixelfunc.reorder(maskhp,inp='NEST',out='RING')
+                Tfield_gauss = Tfield_gauss*maskhp
+                Tfield_full  = Tfield_full*maskhp
+                lssmaps = lssmaps*maskhp
+
             print("Reconstructing velocity")
-                
+
             qe_gauss = self.reconstruct_vt(nside, nsideout, n_level, self.nbin, self.deltachi, Tfield_gauss, lssmaps,  beam_window, cllsslss, clTT, clTlss, clmllss,Noise,lcut)
             qe_full = self.reconstruct_vt(nside, nsideout, n_level, self.nbin, self.deltachi, Tfield_full, lssmaps,  beam_window, cllsslss, clTT, clTlss, clmllss,Noise,lcut)
-    
+
             c.dump(self.basic_conf_dir,qe_gauss,'qe_vt_'+str(nside)+'_'+str(nsideout)+'_gauss'+'_real='+str(r)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
             c.dump(self.basic_conf_dir,qe_full,'qe_vt_'+str(nside)+'_'+str(nsideout)+'_full'+'_real='+str(r)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-        
+
         pass
-    
+
+
     def load_qe_sims_maps(self,real,tag, nside, nsideout, n_level, mask = False):
         
         lcut = lcut = 3*nside-self.lcut_num
@@ -1402,8 +1609,23 @@ class estimator(object):
         gauss =  c.load(self.basic_conf_dir,'qe_'+tag+'_'+str(nside)+'_'+str(nsideout)+'_gauss'+'_real='+str(real)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
         
         return full, gauss
-        
-    def get_clqe_vr_sims(self,nside, nsideout, n_level, mask = True):
+    
+    def load_or_calculate_and_save_rotation(self,nside,nsideout,lcut,force_recalculate = False,save=False):
+        if c.exists(self.basic_conf_dir,'Rvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims') and not force_recalculate:
+            R = c.load(self.basic_conf_dir,'Rvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+        else:
+
+            R = np.zeros((self.nbin,self.nbin))
+
+            for i in np.arange(self.nbin):
+                for j in np.arange(self.nbin):
+                    R[i,j] = self.R(lcut,'vr','vr',i,j,2)
+            if save:
+                c.dump(self.basic_conf_dir,R,'Rvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
+        return R
+
+ 
+    def get_clqe_vr_sims(self,nside, nsideout, n_level, mask = True,recalculate_R = False):
         
         lcut = 3*nside-self.lcut_num
         real_num = self.realnum
@@ -1414,20 +1636,9 @@ class estimator(object):
             
         print("Getting rotation matrix ")
         
-        if c.exists(self.basic_conf_dir,'Rvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims'): 
-            R = c.load(self.basic_conf_dir,'Rvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-        else:
-            
-            R = np.zeros((self.nbin,self.nbin)) 
+        R = self.load_or_calculate_and_save_rotation(nside,nsideout,lcut,force_recalculate = recalculate_R,save=True)
              
-            for i in np.arange(self.nbin):
-                for j in np.arange(self.nbin):      
-                    R[i,j] = self.R(lcut,'vr','vr',i,j,2)
-                    
-            c.dump(self.basic_conf_dir,R,'Rvrvr_'+str(nside)+'_'+str(nsideout)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')
-            
         print("Rotation matrix ready")  
-
 
         for r in np.arange(real_num):
             
@@ -1443,27 +1654,28 @@ class estimator(object):
                         
             print(r)
             
-            Cvv_recon       = np.zeros((3*nsideout,self.nbin))
-            Cvv_actual_rot  = np.zeros((3*nsideout,self.nbin))
-            Cvv_diff        = np.zeros((3*nsideout,self.nbin))
-            Cvv_noise       = np.zeros((3*nsideout,self.nbin))
+            Cvv_recon       = np.zeros((3*nsideout,self.nbin,self.nbin))
+            Cvv_actual_rot  = np.zeros((3*nsideout,self.nbin,self.nbin))
+            Cvv_diff        = np.zeros((3*nsideout,self.nbin,self.nbin))
+            Cvv_noise       = np.zeros((3*nsideout,self.nbin,self.nbin))
                         
 
             for b in np.arange(self.nbin):   
+                for b2 in np.arange(self.nbin):
                 
-                if mask:
+                    if mask:
                                                       
-                    Cvv_recon[:,b]       = healpy.sphtfunc.anafast(qe_full[b]*mask_d_1,qe_full[b]*mask_d_1)
-                    Cvv_actual_rot[:,b]  = healpy.sphtfunc.anafast(vrot[b]*mask_d_1,vrot[b]*mask_d_1)
-                    Cvv_diff[:,b]        = healpy.sphtfunc.anafast(qe_full[b]*mask_d_1-vrot[b]*mask_d_1,qe_full[b]*mask_d_1-vrot[b]*mask_d_1)
-                    Cvv_noise[:,b]       = healpy.sphtfunc.anafast(qe_gauss[b]*mask_d_1,qe_gauss[b]*mask_d_1)
+                        Cvv_recon[:,b,b2]       = healpy.sphtfunc.anafast(qe_full[b]*mask_d_1,qe_full[b2]*mask_d_1)
+                        Cvv_actual_rot[:,b,b2]  = healpy.sphtfunc.anafast(vrot[b]*mask_d_1,vrot[b2]*mask_d_1)
+                        Cvv_diff[:,b,b2]        = healpy.sphtfunc.anafast(qe_full[b]*mask_d_1-vrot[b]*mask_d_1,qe_full[b2]*mask_d_1-vrot[b2]*mask_d_1)
+                        Cvv_noise[:,b,b2]       = healpy.sphtfunc.anafast(qe_gauss[b]*mask_d_1,qe_gauss[b2]*mask_d_1)
                                     
-                else:
+                    else:
                 
-                    Cvv_recon[:,b]       = healpy.sphtfunc.anafast(qe_full[b],qe_full[b])
-                    Cvv_actual_rot[:,b]  = healpy.sphtfunc.anafast(vrot[b],vrot[b])
-                    Cvv_diff[:,b]        = healpy.sphtfunc.anafast(qe_full[b]-vrot[b],qe_full[b]-vrot[b])
-                    Cvv_noise[:,b]       = healpy.sphtfunc.anafast(qe_gauss[b],qe_gauss[b])
+                        Cvv_recon[:,b,b2]       = healpy.sphtfunc.anafast(qe_full[b],qe_full[b2])
+                        Cvv_actual_rot[:,b,b2]  = healpy.sphtfunc.anafast(vrot[b],vrot[b2])
+                        Cvv_diff[:,b,b2]        = healpy.sphtfunc.anafast(qe_full[b]-vrot[b],qe_full[b2]-vrot[b2])
+                        Cvv_noise[:,b,b2]       = healpy.sphtfunc.anafast(qe_gauss[b],qe_gauss[b2])
                          
             c.dump(self.basic_conf_dir,Cvv_recon,'Cvrvr_recon_'+str(nside)+'_'+str(nsideout)+'_real='+str(r)+'_mask='+str(mask)+'_nlevel='+str(n_level)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')   
             c.dump(self.basic_conf_dir,Cvv_actual_rot,'Cvrvr_actual_rot_'+str(nside)+'_'+str(nsideout)+'_real='+str(r)+'_mask='+str(mask)+'_lcut'+str(lcut), dir_base = self.estim_dir+'sims')

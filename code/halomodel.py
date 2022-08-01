@@ -11,6 +11,8 @@ import cosmology
 import CIB_Planck
 import CIB_Websky
 
+import pickle
+
 mthreshHODdefault = np.array( [10.5] ) 
 allsky_squaredeg = 4*np.pi*(180.**2./np.pi**2.)
 allsky_arcmin2 = 4*np.pi*(10800/np.pi)**2
@@ -18,7 +20,7 @@ allsky_sterad = 4*np.pi
 
 class HaloModel(object):
 
-    def __init__(self, conf_module = None, npts=1000,include_ykm=True,use_counterterms = False,mmin_nfn = 1e10):
+    def __init__(self, conf_module = None, npts=1000,include_ykm=True,use_counterterms = False,mmin_nfn = 1e10,frequencies=None):
         
         if conf_module != None:
             self.conf = conf_module
@@ -33,7 +35,7 @@ class HaloModel(object):
             self.CIB = CIB_Planck.CIB(cosmo = self.csm)
         elif self.conf.CIB_model=="Websky":
             self.CIB = CIB_Websky.CIB(cosmo = self.csm)
-                    
+        self.frequencies = frequencies                    
         #flags
         self.onehdamping = False #damping envelope
         self.onehdamping_kstar = 0.03
@@ -99,7 +101,7 @@ class HaloModel(object):
     #set up class variables for the k and z sampling demanded in power spectrum evaluations
     def _setup_k_z_m_grid_functions(self,z,mthreshHOD= mthreshHODdefault,include_ukm=True,include_CIB=True,):
         
-        
+        print("setting up HOD",flush=True) 
         if np.array_equal(self.z,z): #no need to setup the grid functions if they are the same as on the last call
             #now check if the HOD also is unchanged.
             if np.array_equal(self.mthreshHOD,mthreshHOD): #yes, unchanged
@@ -118,7 +120,7 @@ class HaloModel(object):
         #--------- set up HOD m_thresh
         self._setup_mthreshHOD(mthreshHOD)
         end = time.time() #<<<< HOD setup
-        print("HOD setup time:", end-start)
+        print("HOD setup time:", end-start,flush=True)
         
         #-------- Calculate cosmology, CAMB power spectra, and variables in the collapse model. (Takes a minute, go get a coffee and come back :).
 
@@ -278,7 +280,7 @@ class HaloModel(object):
             
             
         end=time.time()
-        print("Redshift loop time:",end-start)
+        print("Redshift loop time:",end-start,flush=True)
 
         #-----p_mm_2h_cts Properties of the dark matter halo.
 
@@ -311,7 +313,7 @@ class HaloModel(object):
                     self.ukm[i,j,:] = (np.sin(x)*(Sic-Si) - np.sin(c*x)/((1+c)*x) + np.cos(x)*(Cic-Ci))/mc
 
             end=time.time() # <<< HERE
-            print("ukm loop time:",end-start)
+            print("ukm loop time:",end-start,flush=True)
     
             #----- Calculate normalized FT's of the gas profiles as a function of mass, z, and k (comoving). interpolate to the present k and z sampling.
                             
@@ -330,7 +332,8 @@ class HaloModel(object):
             print('setting up CIB fluxes')
             t1=time.time()
     
-            freqs = self.conf.cleaning_frequencies[self.conf.cleaning_mode]
+            freqs = self.frequencies#self.conf.cleaning_frequencies[self.conf.cleaning_mode]
+            assert freqs is not None
                  
             for frequency in freqs:
                         
@@ -373,10 +376,13 @@ class HaloModel(object):
                 self.ukHI[i,j,:] = -uhi_1/(-4.*Rv/(rs+Rv) - np.log(rs) - 8.*np.log(rs+Rv) + 9.*np.log(rs+4.*Rv/3.))      
     
     def get_ykm(self,):
-        
+         
         if cm.exists(self.basic_conf_dir,  'yk_battaglia' , dir_base = 'hm_data'):
             return cm.load(self.basic_conf_dir, 'yk_battaglia', dir_base = 'hm_data')     
         else:
+            return pickle.load( open( '/mnt/ceph/users/fmccarthy/kSZ/final_ReCCO/yk_battaglia.p', "rb" ) )
+
+
             pass
             
             
@@ -735,6 +741,9 @@ class HaloModel(object):
         if cm.exists(self.basic_conf_dir,  gasprofile , dir_base = 'hm_data'):
             print("Loading precomputed gas profile")
             return cm.load(self.basic_conf_dir, gasprofile, dir_base = 'hm_data')        
+        elif 1==1:
+            print("loading AGN spectra",flush=True)
+            return pickle.load( open( '/mnt/ceph/users/fmccarthy/kSZ/final_ReCCO/AGN.p', "rb" ) )
         else:
             print("Calculating gas profile (this can take between 30-60 min, but need to do only once for a given config)")
             start = time.time()
@@ -849,6 +858,8 @@ class HaloModel(object):
         if cm.exists(self.basic_conf_dir,  'yk_battaglia' , dir_base = 'hm_data'):
             print("Loading precomputed yk profile")
             return cm.load(self.basic_conf_dir, 'yk_battaglia', dir_base = 'hm_data')   
+        elif 1==1:
+            return pickle.load( open( '/mnt/ceph/users/fmccarthy/kSZ/final_ReCCO/yk_battaglia.p', "rb" ) )
         else:
             print("Calculating yk profile (this can take between 30-60 min, but need to do only once for a given config)")
             start = time.time()

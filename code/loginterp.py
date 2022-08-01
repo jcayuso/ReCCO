@@ -50,11 +50,12 @@ def log_interpolate_vector(A_sample, ell_sparse):
             m = np.min(A_sample[:,i])  
             if m > 0.0:
                 Y = 0.0
-            if m < 0.0:
+            elif m < 0.0:
                 Y = np.abs(m)+np.abs(m)*1e-5
-            if m == 0.0:
+            elif m == 0.0:
                 Y = np.min(A_sample[inz,i])/1e10
-                
+            else:
+                print(m) 
             I = interp1d(np.log10(ell_sparse),np.log10(A_sample[:,i]+Y), kind= 'linear')
             A[ell_sparse[0]:] = (np.power(10.0, I(np.log10(ls[ell_sparse[0]:])))-Y)*cut[ell_sparse[0]:]
             

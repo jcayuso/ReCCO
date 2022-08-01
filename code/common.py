@@ -110,7 +110,9 @@ def get_hash(basic_conf) :
 
 def get_output_directory(basic_conf, dir_base = '',) :
     basic_conf_id_str = get_hash(basic_conf)
-    output_directory = "output/" + basic_conf_id_str + "/" + dir_base + "/"
+    #output_directory = "/mnt/ceph/users/fmccarthy/kSZ/final_ReCCO/output/" + basic_conf_id_str + "/" + dir_base + "/"
+
+    output_directory = "/mnt/ceph/users/fmccarthy/kSZ/final_ReCCO/output/" + basic_conf_id_str + "/" + dir_base + "/"
     mkdir_p(output_directory)
     return output_directory
 
@@ -147,7 +149,7 @@ def write_basic_conf(basic_conf) :
 
 def load_basic_conf(hashstr) :
     """Load basic conf data from a given hash string"""
-    filename = "output/" + hashstr + "/metadata.p"
+    filename = "/mnt/ceph/users/fmccarthy/kSZ/final_ReCCO/output/" + hashstr + "/metadata.p"
     if not os.path.isfile(filename) :
         raise Exception('Data associated with hash "'+str(hashstr)+'" not found.')
     data = pickle.load( open( filename, "rb" ) )
@@ -183,7 +185,7 @@ def exists(basic_conf, file_base, dir_base = '') :
 def plots_path(basic_conf, dirname) :
     basic_conf_hash = get_hash(basic_conf)
     # Make plots directory
-    plots_path = "output/"+basic_conf_hash+"/plots/" + dirname + "/"
+    plots_path = "/mnt/ceph/users/fmccarthy/kSZ/final_ReCCO/output//"+basic_conf_hash+"/plots/" + dirname + "/"
     mkdir_p(plots_path)
     return plots_path
 

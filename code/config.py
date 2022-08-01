@@ -3,10 +3,11 @@ import numpy as np
 
 ################ red shift binning
 
-z_max = 5.0 #highest redshift.
-z_min = 0.2 #lowest redshift.
+z_max = 4.5 #highest redshift.
+z_min = 0.01 #lowest redshift.
 
-N_bins = 8 #number of red shift bins, uniform in conformal distance.
+N_bins =  8 #number of red shift bins, uniform in conformal distance.
+N_bins_tracer = 1 #number of red shift bins, uniform in conformal distance.
 
 ################ halomodel
 
@@ -21,8 +22,8 @@ ks_hm = np.logspace(log_kmin,log_kmax,num=k_res )     #k-sampling
 zs_hm = np.logspace(-2,np.log10(6),150) #z-sampling 
 
 ################ LSS 
-
-LSSexperiment = 'LSST' # 'unwise_blue' #'custom
+LSSexperiment  = 'ACT_CIB'
+#LSSexperiment = 'ACT_CIB'#unwise_blue'#'LSST' # 'unwise_blue' #'custom
 
 sigma_photo_z = 0.05 
 sigma_cal = 1e-4 # variance of photometric calibration erros (as appearing in arXiv:1709.08661)
@@ -69,5 +70,4 @@ noiseTuKArcmin_pol = 1.0 #1.5
 CIB_model = 'Websky'
 
 ################ Cleaning tags
-cleaning_mode = 'SO'
 cleaning_frequencies = {'Planck' : np.array([30,44,70,100,143,217,353,545,857]), 'SO' : np.array([27,39,93,145,225,280]), 'DoubleSO' : np.round(np.concatenate([np.linspace(10,120,10),np.linspace(125,165,8),np.logspace(np.log10(177),np.log10(1500),20)]),0)[1:-1:3]}
