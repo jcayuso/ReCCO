@@ -23,7 +23,7 @@ class estimator(object):
     ############ CLASS SET UP AND CL TOOLS
     #####################################################################
     
-    def __init__(self, data_lmax = None, conf_module = None,lss = 'g',CMB_experiment='SO',recon_freq=143) :
+    def __init__(self, data_lmax = None, conf_module = None,lss = 'g',CMB_experiment='SO',recon_freq=143,nbin_tracer = None,include_Tlss = True) :
         
         if conf_module != None:
             self.conf = conf_module
@@ -48,7 +48,11 @@ class estimator(object):
         self.csm = self.zb.csm        
         self.deltachi = self.zb.deltachi
         self.nbin = self.conf.N_bins
-        self.nbin_tracer = self.conf.N_bins_tracer 
+        if nbin_tracer is not None:
+            self.nbin_tracer = self.conf.N_bins_tracer 
+        else:
+            self.nbin_tracer = nbin_tracer
+
         self.N_fine_modes = self.conf.N_bins  
         self.lss = lss 
         self.CMB_experiment = CMB_experiment
@@ -97,6 +101,9 @@ class estimator(object):
             #TODO: maybe add an assert 'xx' in Cls_dict.keys() to check that the correct Cls are in the dict?
 
             self.Cls = Cls_dict
+            self.estim_dir = 'estim/'+c.get_hash(c.get_basic_conf(self.conf, exclude = False))+'/'+self.lss+'_T_freq='+str(None)+self.CMB_experiment+'/'
+
+
         else:
             #otherwise, go to the old function
             self.set_precomputed_Cls(add_ksz = add_ksz, add_ml=add_ml, add_lensing = add_lensing,use_cleaned = use_cleaned,frequency=frequency,get_haar = get_haar,CIB_freqs = CIB_freqs,include_Tlss = include_Tlss,include_primaryCMB=include_primaryCMB)
@@ -324,7 +331,7 @@ class estimator(object):
 
     def g(self, tag, alpha, l, l1, l2, Ae = None):
         
-        if self.conf.LSSexperiment == 'LSST':
+        if self.nbin == self.nbin_tracer:
         
             CTT     = self.Cls['T-T'][:,0,0]
             CTlss   = self.Cls['T-lss'][:,0,alpha]    
@@ -335,7 +342,7 @@ class estimator(object):
                         
             return G
         
-        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom'or 'CIB' in  self.conf.LSSexperiment:
+        elif self.nbin_tracer ==1:
         
             CTT     = self.Cls['T-T'][:,0,0]
             CTlss   = self.Cls['T-lss'][:,0,0]    
@@ -347,7 +354,7 @@ class estimator(object):
             return G
         
         else:
-            raise Exception("LSS experiment not valid")
+            raise Exception("No testing done for nbin_tracer != nbin except for nbin_tracer = 1")
     
     def cs1_alpha_gamma(self, lmax, tag_g, tag_f, alpha, gamma, ell, Ae = None): 
         
@@ -379,12 +386,12 @@ class estimator(object):
                         if ell_1 > lmax or ell_1 <2:   #triangle rule
                             continue
                         
-                        if self.conf.LSSexperiment == 'LSST':
+                        if self.nbin == self.nbin_tracer:
                             terms += self.f(tag_f, alpha, gamma, ell, ell_1, ell_2, Ae = Ae)*self.g(tag_g, alpha, ell, ell_1, ell_2, Ae = Ae)
-                        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom' or 'CIB' in  self.conf.LSSexperiment: 
+                        elif self.nbin_tracer ==1:
                             terms += self.f(tag_f, 0, gamma, ell, ell_1, ell_2, Ae = Ae)*self.g(tag_g, alpha, ell, ell_1, ell_2, Ae = Ae)
                         else:
-                            raise Exception("LSS experiment not valid")
+                            raise Exception("No testing done for nbin_tracer != nbin except for nbin_tracer = 1")
                       
                     a.append(terms)
                 
@@ -414,7 +421,7 @@ class estimator(object):
         a = []
         
     
-        if self.conf.LSSexperiment == 'LSST':
+        if self.nbin == self.nbin_tracer:
     
             Clsslss_alpha_gamma  = self.Cls['lss-lss'][:,alpha,gamma]
             CTT                  = self.Cls['T-T'][:,0,0]
@@ -435,7 +442,7 @@ class estimator(object):
                 
                 a.append(terms)
         
-        elif self.conf.LSSexperiment == 'unwise_blue' or self.conf.LSSexperiment == 'custom' or 'CIB' in  self.conf.LSSexperiment:
+        elif self.nbin_tracer == 1:
             
             Clsslss_alpha_gamma  = self.Cls['lss-lss'][:,0,0]
             CTT                  = self.Cls['T-T'][:,0,0]
@@ -457,7 +464,7 @@ class estimator(object):
                 a.append(terms)
                 
         else:
-            raise Exception("LSS experiment not valid")
+            raise Exception("No testing done for nbin_tracer != nbin except for nbin_tracer = 1")
                         
         #print(L.shape,np.asarray(a).shape)
         if len(np.asarray(a).shape)==3:
@@ -942,6 +949,8 @@ class estimator(object):
         
     
     def bare_quad_est_vr(self,nside, n_level, nbin, bin_width, Tfield, lssfield, beam_window, cllsslssbinned, ClTT, clTlssbinned, cltaudlssbinned, lcut):
+        
+        lssfield = np.atleast_2d(lssfield)
 
         ones =  np.ones(3*nside)
         cut = np.where(np.arange(3*nside)<lcut, 1, 1e-30)
@@ -955,21 +964,23 @@ class estimator(object):
         
         
         for i in range(nbin):
-            if 'CIB' in  self.conf.LSSexperiment: 
+            if self.nbin_tracer ==1:
                 Cltaudd = cltaudlssbinned[:,i,0]*bin_width
                 Cldd = cllsslssbinned[:,0,0]
                 ClTd = clTlssbinned[:,0,0]
-            else:
+                if i==0:
+                    dlm_in = healpy.almxfl(healpy.map2alm(lssfield[0]),cut)
+            elif self.nbin == self.nbin_tracer:
                 Cltaudd = cltaudlssbinned[:,i,i]*bin_width
                 Cldd = cllsslssbinned[:,i,i]
                 ClTd = clTlssbinned[:,0,i]
+                dlm_in = healpy.almxfl(healpy.map2alm(lssfield[i]),cut)
+            else:
+                raise Exception("No testing done for nbin_tracer != nbin except for nbin_tracer = 1")
     
-            dlm_in = healpy.almxfl(healpy.map2alm(lssfield[i]),cut)
-            
             dTlm_xi = healpy.almxfl(dTlm_beamed,np.divide(ones, ClTT, out=np.zeros_like(ones), where=ClTT!=0))
             dlm_zeta = healpy.almxfl(dlm_in, np.divide(Cltaudd, Cldd, out=np.zeros_like(Cltaudd), where=Cldd!=0))
              
-            
             if n_level!=0:
                 ffactor1 = ClTd**(2*n_level)
                 ffactor2 = (ClTT * Cldd)**(n_level)
@@ -1111,7 +1122,7 @@ class estimator(object):
         xizetabar = np.zeros((nbin,healpy.nside2npix(nside)))
         binned_qe = np.zeros((nbin,healpy.nside2npix(nsideout)))
           
-            
+         
         for n in range(n_level+1):
             xizetat, xizetabart = self.bare_quad_est_vr(nside, n, nbin, bin_width, Tfield, gmaps, beam_window, cllsslss, clTT, clTlss,cltaudlss,lcut)
             xizeta += xizetat
@@ -1195,8 +1206,8 @@ class estimator(object):
                 else:
                     for i in np.arange(self.nbin): 
                         for j in np.arange(0,i+1):
+                            noisebinbin = self.Noise_iso(lcut,'vr',i,j,2)
                             for lid, l in enumerate(Lsamp):
-                                noisebinbin = self.Noise_iso(lcut,'vr',i,j,2)
                                 Noise_int[lid,i,j] = Noise_int[lid,j,i] = noisebinbin
           
             else:
@@ -1423,10 +1434,26 @@ class estimator(object):
         pass
 
     def reconstruct_velocity_from_maps(self,Tfield,lssmaps,nsidein,nsideout,fast=False):
+         '''
+         Reconstructs velocity  from maps.
+      
+         Parameters:
+         Tfield (1d array) the temperature map
+         lssmaps (1d or 2d array) the LSS tracer map(s)
+         nsidein (int) the native resolution
+         nsideout (int) the output resolution
+         fast (bool) : if True, this speeds up the 
+                       computation by only calculating the noise N_ell at 
+                       ell=2 and assigning that value of noise at all 
+                       higher ells (essentially taking advantage of the 
+                       scale-independence of the noise)
+         '''
 
          lcut = 3*nsidein-self.lcut_num
 
-         print("calculating noise")
+         lssmaps = np.atleast_2d(lssmaps)
+         assert lssmaps.shape[0] == self.nbin_tracer
+
          Noise = self.load_or_calculate_and_save_noise(nsidein,nsideout,lcut,force_recalculate = True,save=False,fast=fast,diagonal=False)
          Noise_diagonal = np.zeros((Noise.shape[0],Noise.shape[-1]))
          for ellind in np.arange(0,Noise.shape[-1]):
