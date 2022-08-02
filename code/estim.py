@@ -48,7 +48,7 @@ class estimator(object):
         self.csm = self.zb.csm        
         self.deltachi = self.zb.deltachi
         self.nbin = self.conf.N_bins
-        if nbin_tracer is not None:
+        if nbin_tracer is None:
             self.nbin_tracer = self.conf.N_bins_tracer 
         else:
             self.nbin_tracer = nbin_tracer
