@@ -17,6 +17,10 @@ import healpy
 import noisegen as ng
 
 import time
+
+import recon_MaxL
+
+
 class estimator(object):
     
     #####################################################################
@@ -948,7 +952,7 @@ class estimator(object):
         return map_list, alms
         
     
-    def bare_quad_est_vr(self,nside, n_level, nbin, bin_width, Tfield, lssfield, beam_window, cllsslssbinned, ClTT, clTlssbinned, cltaudlssbinned, lcut):
+    def bare_quad_est_vr(self,nside, n_level, nbin, bin_width, Tfield, lssfield, beam_window, cllsslssbinned, ClTT, clTlssbinned, cltaudlssbinned, lcut,dobins='all'):
         
         lssfield = np.atleast_2d(lssfield)
 
@@ -962,8 +966,11 @@ class estimator(object):
         dTlm = healpy.map2alm(Tfield)
         dTlm_beamed = healpy.almxfl(dTlm,(1./beam_window)*cut)
         
-        
-        for i in range(nbin):
+        if dobins =='all':
+            bins = range(nbin) 
+        else:
+            bins = dobins
+        for i in bins:
             if self.nbin_tracer ==1:
                 Cltaudd = cltaudlssbinned[:,i,0]*bin_width
                 Cldd = cllsslssbinned[:,0,0]
@@ -1115,7 +1122,7 @@ class estimator(object):
     
 
     
-    def reconstruct_vr(self, nside, nsideout, n_level, nbin , bin_width, Tfield, gmaps, beam_window, cllsslss, clTT, clTlss, cltaudlss, Noise, lcut):
+    def reconstruct_vr(self, nside, nsideout, n_level, nbin , bin_width, Tfield, gmaps, beam_window, cllsslss, clTT, clTlss, cltaudlss, Noise, lcut,dobins='all'):
         
 
         xizeta = np.zeros((nbin,healpy.nside2npix(nside)))
@@ -1124,12 +1131,15 @@ class estimator(object):
           
          
         for n in range(n_level+1):
-            xizetat, xizetabart = self.bare_quad_est_vr(nside, n, nbin, bin_width, Tfield, gmaps, beam_window, cllsslss, clTT, clTlss,cltaudlss,lcut)
+            xizetat, xizetabart = self.bare_quad_est_vr(nside, n, nbin, bin_width, Tfield, gmaps, beam_window, cllsslss, clTT, clTlss,cltaudlss,lcut,dobins=dobins)
             xizeta += xizetat
             xizetabar += xizetabart
 
-
-        for binn in range(nbin):
+        if dobins=='all':
+           bins=range(nbin)
+        else:
+           bins = dobins
+        for binn in bins:
             veff_reconstlm = healpy.almxfl(healpy.map2alm(xizeta[binn]-xizetabar[binn],lmax=(3*nsideout-1)),Noise[binn])
             binned_qe[binn] = healpy.alm2map(veff_reconstlm, nsideout)
 
@@ -1433,9 +1443,25 @@ class estimator(object):
             return Tfield_full
         pass
 
-    def reconstruct_velocity_from_maps(self,Tfield,lssmaps,nsidein,nsideout,fast=False):
+    def reconstruct_velocity_from_maps(self,Tfield,lssmaps,nsidein,nsideout,fast=False,dobins='all',estim_type='QE'):
+        '''
+        Reconstructs velcotiy from maps with either the QE or MaxL estimator.
+
+        To do: change the output so that it is consistent for both QE and MaxL
+        ''' 
+        assert estim_type in ['QE','MaxL']
+
+        if estim_type == 'QE':
+             qe_full,Noise ,R = self.reconstruct_velocity_from_maps_QE(Tfield,lssmaps,nsidein,nsideout,fast=fast,dobins=dobins)
+             return qe_full,Noise ,R 
+        elif estim_type == 'MaxL':
+             clpT = (self.Cls['T-T'] - self.Cls['kSZ-kSZ'])[:,0,0]
+             MaxLv = recon_MaxL.reconstruct_rml(Tfield,lssmaps,clpT,nsidein ,nsideout,self.nbin,dobins=dobins)
+             return  MaxLv
+
+    def reconstruct_velocity_from_maps_QE(self,Tfield,lssmaps,nsidein,nsideout,fast=False,dobins='all'):
          '''
-         Reconstructs velocity  from maps.
+         Reconstructs velocity  from maps with the QE.
       
          Parameters:
          Tfield (1d array) the temperature map
@@ -1469,7 +1495,7 @@ class estimator(object):
          
          beam_window = np.ones(3*nsidein)
 
-         qe_full = self.reconstruct_vr(nsidein, nsideout, n_level, self.nbin, self.deltachi, Tfield, lssmaps,  beam_window, cllsslss, clTT, clTlss, cltaudlss,Noise_diagonal ,lcut)
+         qe_full = self.reconstruct_vr(nsidein, nsideout, n_level, self.nbin, self.deltachi, Tfield, lssmaps,  beam_window, cllsslss, clTT, clTlss, cltaudlss,Noise_diagonal ,lcut,dobins=dobins)
          print("done in",time.time()-t1)
 
          R = self.load_or_calculate_and_save_rotation(nsidein,nsideout,lcut,force_recalculate = True,save=False)
