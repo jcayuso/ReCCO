@@ -1453,7 +1453,11 @@ class estimator(object):
 
         if estim_type == 'QE':
              qe_full,Noise ,R = self.reconstruct_velocity_from_maps_QE(Tfield,lssmaps,nsidein,nsideout,fast=fast,dobins=dobins)
-             return qe_full,Noise ,R 
+             estimation = {}
+             estimation['QE'] = qe_full
+             estimation['Noise'] = Noise
+             estimation['R'] = R
+             return estimation
         elif estim_type == 'MaxL':
              clpT = (self.Cls['T-T'] - self.Cls['kSZ-kSZ'])[:,0,0]
              MaxLv = recon_MaxL.reconstruct_rml(Tfield,lssmaps,clpT,nsidein ,nsideout,self.nbin,dobins=dobins)
