@@ -1246,6 +1246,7 @@ class estimator(object):
                 clTlss   = self.Cls['T-lss'][:3*nside].copy()
                 cltaudlss = self.Cls['taud-lss'][:3*nside].copy()
                 cllsslss  = self.Cls['lss-lss'][:3*nside].copy()
+                print("mask is",mask)
                 clksz     = self.Cls['kSZ-kSZ'][:3*nside,0,0].copy()
                 if not include_primaryCMB:
                    CMB_mult = 0
@@ -1337,7 +1338,7 @@ class estimator(object):
                     Tfield_full =  healpy.smoothing(kszmap + CMB_mult*Tmap,fwhm=self.beam) + healpy.synfast(self.dT*self.dT*np.ones(3*nside),nside)
                 clTT[0:100]    =0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
                 cllsslss[0:100]=0   #Low multipoles dont contribute to the reconstruction . At the moment I put this to filter some low ell noise in the realizations.
-                if not (mask is False or mask is not None):
+                if not (mask is False or mask is None):
 
                     from astropy.io import fits
                     maskfile = '/mnt/ceph/users/fmccarthy/comp_separation/PLA/masks/HFI_Mask_GalPlane-apo0_2048_R2.00.fits'
@@ -1443,7 +1444,7 @@ class estimator(object):
             return Tfield_full
         pass
 
-    def reconstruct_velocity_from_maps(self,Tfield,lssmaps,nsidein,nsideout,fast=False,dobins='all',estim_type='QE'):
+    def reconstruct_velocity_from_maps(self,Tfield,lssmaps,nsidein,nsideout,fast=False,dobins='all',estim_type='QE',n_level=0):
         '''
         Reconstructs velcotiy from maps with either the QE or MaxL estimator.
 
@@ -1452,7 +1453,7 @@ class estimator(object):
         assert estim_type in ['QE','MaxL']
 
         if estim_type == 'QE':
-             qe_full,Noise ,R = self.reconstruct_velocity_from_maps_QE(Tfield,lssmaps,nsidein,nsideout,fast=fast,dobins=dobins)
+             qe_full,Noise ,R = self.reconstruct_velocity_from_maps_QE(Tfield,lssmaps,nsidein,nsideout,fast=fast,dobins=dobins,n_level = n_level)
              estimation = {}
              estimation['QE'] = qe_full
              estimation['Noise'] = Noise
@@ -1463,7 +1464,7 @@ class estimator(object):
              MaxLv = recon_MaxL.reconstruct_rml(Tfield,lssmaps,clpT,nsidein ,nsideout,self.nbin,dobins=dobins)
              return  MaxLv
 
-    def reconstruct_velocity_from_maps_QE(self,Tfield,lssmaps,nsidein,nsideout,fast=False,dobins='all'):
+    def reconstruct_velocity_from_maps_QE(self,Tfield,lssmaps,nsidein,nsideout,fast=False,dobins='all',n_level=0):
          '''
          Reconstructs velocity  from maps with the QE.
       
@@ -1495,7 +1496,6 @@ class estimator(object):
          cllsslss  = self.Cls['lss-lss'][:3*nsidein]
          t1=time.time()
          print("calculating reconstruction")
-         n_level = 0
          
          beam_window = np.ones(3*nsidein)
 
