@@ -22,7 +22,7 @@ def getmthreshHODstellar(LSSexperiment,zs): #HOD threshold for a given experimen
         mthreshHODstellar = get_mthreshHOD_lsst(zs)
     elif LSSexperiment == 'unwise_blue':
         mthreshHODstellar = halomodel.mthreshHODdefault
-    elif LSSexperiment == 'custom':
+    elif LSSexperiment == 'custom' or 'CIB' in LSSexperiment:
         mthreshHODstellar = halomodel.mthreshHODdefault
     else:
         raise Exception ("LSS experiment not supported.")      
@@ -53,24 +53,24 @@ class pks(object):
         else:
             return c.load(self.basic_conf_dir, 'p_'+c.retag(tag2)+c.retag(tag2)+'_f1='+str(fq2)+'_f2 ='+str(fq2), dir_base = 'pks')
     
-    def start_halo(self,):
+    def start_halo(self,frequencies):
         if self.conf.z_min < 0.01 or self.conf.z_max > 5.0:
                     raise Exception("Halo model currently only supported for z_min >= 0.01 and z_max <= 5 ")    
         print("Starting halo model")
-        self.hmod = halomodel.HaloModel(conf_module = self.conf)
+        self.hmod = halomodel.HaloModel(conf_module = self.conf,frequencies=frequencies)
         self.mthreshHODstellar = getmthreshHODstellar(self.conf.LSSexperiment,self.conf.zs_hm)         
         self.hmod._setup_k_z_m_grid_functions(self.conf.zs_hm,self.mthreshHODstellar,include_ukm=True,include_CIB= True)
         
-    def get_pks(self,tag1,tag2,fq1,fq2):
+    def get_pks(self,tag1,tag2,fq1,fq2,frequencies= None):
         
-        B1,B2 = self.check_pks(tag1,tag2,fq1,fq2)
+        B1,B2 = self.check_pks(tag1,tag2,fq1,fq2,)
         
         if B1 and B2:
             pass
         else:         
             if c.retag(tag1) in ['e','g','m','tSZ','CIB'] and c.retag(tag2) in ['e','g','m','tSZ','CIB'] :
                 
-                print("Computing "+c.retag(tag1)+c.retag(tag2)+" P(k,z) interpolating function from halo model")
+                print("Computing "+c.retag(tag1)+c.retag(tag2)+" P(k,z) interpolating function from halo model",flush=True)
                 
                 def spec(tag):      
                     if tag == 'e':
@@ -88,7 +88,7 @@ class pks(object):
                         return tag
                 
                 if self.hmod is None:
-                    self.start_halo()                       
+                    self.start_halo(frequencies)                       
                     
                 start = time.time()
                 
